@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang=en>
+<head>
+  <meta charset="utf-8">
+  <title>Event driven webtorrent example</title>
+</head>
+<body>
+  <h1>Example</h1>
+    <c-webtorrent>
+      <v-webtorrent></v-webtorrent>
+    </c-webtorrent>
+  </div>
+  <script rel=preload type=module>
+    /**
+     * First level controllers and organisms are loaded and defined here (loadChildComponents)
+     */
+    Promise.all([
+      import('./src/controllers/Webtorrent.js').then(module => ['c-webtorrent', module.default]),
+      import('./src/views/Webtorrent.js').then(module => ['v-webtorrent', module.default])
+    ]).then(elements => elements.forEach(element => {
+      // don't define already existing customElements
+      if (element && !customElements.get(element[0])) customElements.define(...element)
+    }))
+  </script>
+  <style></style>
+</body>
+</html>
