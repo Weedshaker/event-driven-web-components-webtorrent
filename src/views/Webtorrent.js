@@ -4,7 +4,6 @@
  * Webtorrent
  *
  * @export
- * @function Shadow
  * @param {CustomElementConstructor} [ChosenHTMLElement = HTMLElement]
  * @return {CustomElementConstructor | *}
  */

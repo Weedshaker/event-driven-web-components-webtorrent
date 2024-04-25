@@ -5,7 +5,6 @@ import WebTorrent from '../webtorrent/dist/webtorrent.min.js'
  * https://webtorrent.io/docs
  *
  * @export
- * @function Shadow
  * @param {CustomElementConstructor} [ChosenHTMLElement = HTMLElement]
  * @return {CustomElementConstructor | *}
  */
