@@ -7,7 +7,7 @@
     "fix": "standard --fix",
     "serve": "live-server --port=4200 --host=localhost --entry-file=index.html"
   },
-  "author": "weedshaker@gmail.com",
+  "author": "weedshaker@starsystems.ch",
   "license": "MIT",
   "devDependencies": {
     "live-server": "*",
