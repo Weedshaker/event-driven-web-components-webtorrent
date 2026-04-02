@@ -37,12 +37,19 @@ export default class Webtorrent extends HTMLElement {
       console.error('Webtorrent is not working - since there is no navigator.serviceWorker', this)
     }
     
-    this.webtorrentAddEventListener = event => {
-      const torrent = this.client.add(event.detail.torrentId, event.detail.opts, async torrent => {
-        await isReadyPromise
-        this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {torrent})
+    this.webtorrentAddEventListener = async event => {
+      await isReadyPromise
+      this.client.get(event.detail.torrentId).then(existingTorrent => {
+        if (existingTorrent) {
+          if (event.detail.error) {
+            existingTorrent.destroy()
+          } else {
+            return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {torrent: existingTorrent})
+          }
+        }
+        const torrent = this.client.add(event.detail.torrentId, event.detail.opts, torrent => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {torrent}))
+        torrent.on('error', error => console.warn('Webtorrent torrent error:', error))
       })
-      torrent.on('error', error => console.warn('Webtorrent torrent error:', error))
     }
   }
 

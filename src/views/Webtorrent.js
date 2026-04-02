@@ -12,20 +12,32 @@ export default class Webtorrent extends HTMLElement {
     super()
     
     this.root = this.attachShadow({ mode: 'open' })
+    this.webtorrentTargetElements = []
+    let errorTimeoutID
+    this.errorEventListener = event => {
+      console.warn('Webtorrent view error:', event)
+      clearTimeout(errorTimeoutID)
+      errorTimeoutID = setTimeout(() => {
+        this.webtorrentTargetElements.forEach(({renderTarget, appendTarget, figcaptionTarget}) => {
+          renderTarget.remove()
+          appendTarget.remove()
+          figcaptionTarget?.remove()
+        })
+        this.clonedElements.forEach(element => element.remove())
+        this.section.innerHTML = ''
+        this.init(event)
+      }, 2000)
+    }
   }
 
-  connectedCallback() {
-    if (this.isConnected) this.connectedCallbackOnce()
-  }
-
-  connectedCallbackOnce () {
+  init (errorEvent) {
     this.hidden = true
-    this.root.appendChild(this.section)
     new Promise(resolve => this.dispatchEvent(new CustomEvent('webtorrent-add', {
       detail: {
         torrentId: this.getAttribute('torrent-id') || Array.from((new URL(location.href)).searchParams).reduce((acc, curr) => curr[0] === 'torrent-id'
           ? `${curr[1]}`
           : `${acc}&${curr[0]}=${curr[1]}`, ''),
+        error: errorEvent,
         resolve
       },
       bubbles: true,
@@ -35,14 +47,29 @@ export default class Webtorrent extends HTMLElement {
       const files = []
       let file
       if ((file = torrent.files.find(file => file.name === this.getAttribute('file-name')))) {
-        Webtorrent.renderFileTo(file, this, this.section)
+        this.webtorrentTargetElements.push(Webtorrent.renderFileTo(file, this, this.section))
       } else {
-        Webtorrent.renderFilesTo(torrent, this, this.section)
+        this.webtorrentTargetElements = this.webtorrentTargetElements.concat(Webtorrent.renderFilesTo(torrent, this, this.section))
       }
+      this.webtorrentTargetElements.forEach(({renderTarget}) => renderTarget.addEventListener('error', this.errorEventListener))
       this.hidden = false
     })
+  }
+
+  connectedCallback() {
+    this.webtorrentTargetElements.forEach(({renderTarget}) => renderTarget.addEventListener('error', this.errorEventListener))
+    if (this.isConnected) this.connectedCallbackOnce()
+  }
+
+  connectedCallbackOnce () {
+    this.root.appendChild(this.section)
+    this.init()
     // @ts-ignore
     this.connectedCallbackOnce = () => {}
+  }
+
+  disconnectedCallback () {
+    this.webtorrentTargetElements.forEach(({renderTarget}) => renderTarget.removeEventListener('error', this.errorEventListener))
   }
 
   static renderFilesTo (torrent, webComponent, targetContainer) {
@@ -50,10 +77,13 @@ export default class Webtorrent extends HTMLElement {
     const videoResults = results.filter(result => result.tagName === 'video')
     if (videoResults.length === 1) {
       targetContainer.appendChild(videoResults[0].appendTarget)
-      results.forEach(({renderTarget, tagName, file}) => {
+      results.forEach(({renderTarget, appendTarget, figcaptionTarget, tagName, file}) => {
         if (tagName === 'track') {
           videoResults[0].renderTarget.appendChild(renderTarget)
         } else if (tagName === 'img') {
+          renderTarget.remove()
+          appendTarget.remove()
+          figcaptionTarget?.remove()
           videoResults[0].renderTarget.setAttribute('poster', file.streamURL)
         }
       })
@@ -67,11 +97,12 @@ export default class Webtorrent extends HTMLElement {
         }
       })
     }
+    return results
   }
 
   static renderFileTo (file, webComponent, targetContainer, fileCount, append = true) {
     const tagName = Webtorrent.getTagNameByMimeType(file.type)[0]
-    const {renderTarget, appendTarget} = Webtorrent.getElement(webComponent, tagName, file.name, fileCount)
+    const {renderTarget, appendTarget, figcaptionTarget} = Webtorrent.getElement(webComponent, tagName, file.name, fileCount)
     if (append) targetContainer.appendChild(appendTarget)
     if (tagName === 'a') {
       renderTarget.setAttribute('target', '_blank')
@@ -89,28 +120,31 @@ export default class Webtorrent extends HTMLElement {
       renderTarget.appendChild(a)
       file.streamTo(renderTarget)
     }
-    return {renderTarget, appendTarget, file, tagName}
+    return {renderTarget, appendTarget, figcaptionTarget, file, tagName}
   }
 
   static getElement (webComponent, tagName, fileName, fileCount) {
     const {slot, target} = Webtorrent.getSlotAndTarget(tagName, webComponent, fileCount)
     let appendTarget = slot || target
+    let figcaptionTarget
     // figcaption
     if (tagName !== 'a' && tagName !== 'track') {
-      const {slot: figcaptionSlot, target: figcaptionTarget} = Webtorrent.getSlotAndTarget('figure', webComponent, fileCount)
+      const {slot: figcaptionSlot, target: figure} = Webtorrent.getSlotAndTarget('figure', webComponent, fileCount)
+      figcaptionTarget = figure
       appendTarget = figcaptionSlot || figcaptionTarget
       figcaptionTarget.appendChild(target)
       const figcaption = document.createElement('figcaption')
       figcaption.textContent = fileName
       figcaptionTarget.appendChild(figcaption)
     }
-    return {renderTarget: target, appendTarget}
+    return {renderTarget: target, appendTarget, figcaptionTarget}
   }
 
   static getSlotAndTarget (tagName, webComponent, count = 0) {
     let slot, target
     if ((target = webComponent.querySelector(`[slot="${tagName}"]`))) {
       target = target.cloneNode()
+      target.setAttribute('is-clone', '')
       target.hidden = false
       const name = `${tagName}-${count}`
       target.setAttribute('slot', name)
@@ -139,6 +173,10 @@ export default class Webtorrent extends HTMLElement {
 
   get section () {
     return this._section || (this._section = this.root.querySelector('section')) || (this._section = document.createElement('section'))
+  }
+
+  get clonedElements () {
+    return Array.from(this.querySelectorAll('[is-clone]'))
   }
 
   // display trumps hidden property, which we resolve here as well as we allow an animation on show
