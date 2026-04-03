@@ -18,6 +18,40 @@ export default class Webtorrent extends HTMLElement {
 
     this.client = new WebTorrent()
     this.client.on('error', error => console.warn('Webtorrent client error:', error))
+
+    const presetTrackers = [
+      'udp://tracker.opentrackr.org:1337/announce',
+      'udp://9.rarbg.com:2810/announce',
+      'udp://tracker.torrent.eu.org:451/announce',
+      'udp://tracker.moeking.me:6969/announce',
+      'udp://tracker.dler.org:6969/announce',
+      'udp://tracker.altrosky.nl:6969/announce',
+      'udp://p4p.arenabg.com:1337/announce',
+      'udp://opentracker.i2p.rocks:6969/announce',
+      'udp://open.stealth.si:80/announce',
+      'udp://open.demonii.com:1337/announce',
+      'udp://explodie.org:6969/announce',
+      'udp://exodus.desync.com:6969/announce',
+      'https://tracker.nanoha.org:443/announce',
+      'https://tracker.lilithraws.org:443/announce',
+      'https://tr.burnabyhighstar.com:443/announce',
+      'https://opentracker.i2p.rocks:443/announce',
+      'http://tracker1.bt.moack.co.kr:80/announce',
+      'http://tracker.mywaifu.best:6969/announce',
+      'udp://zecircle.xyz:6969/announce',
+      'udp://www.peckservers.com:9000/announce'
+    ]
+    this.addOpts = fetch('https://cdn.jsdelivr.net/gh/ngosang/trackerslist@master/trackers_best.txt').then(response => {
+        if (response.status >= 200 && response.status <= 299) return response.text()
+        throw new Error(response.statusText)
+    }).then(text => text.split('\n').filter(text => text)).then(trackers => ({
+			announce: Array.from(new Set([
+        ...trackers,
+				...presetTrackers
+			]))
+		})).catch(error => ({announce: presetTrackers}))
+
+    // service worker stream server
     let isStreamToServerReadyResolve = controller => controller
     /** @type {any} */
     const streamToServerReadyPromise = new Promise(resolve => (isStreamToServerReadyResolve = resolve))
@@ -37,11 +71,11 @@ export default class Webtorrent extends HTMLElement {
         createServer()
       })
     } else {
-      console.error('Webtorrent is not working - since there is no navigator.serviceWorker', this)
+      console.warn('Webtorrent is not working - since there is no navigator.serviceWorker', this)
     }
     
     this.webtorrentAddEventListener = event => {
-      this.client.get(event.detail.torrentId).then(existingTorrent => {
+      this.client.get(event.detail.torrentId).then(async existingTorrent => {
         if (existingTorrent) {
           if (event.detail.destroy) {
             existingTorrent.destroy()
@@ -49,7 +83,7 @@ export default class Webtorrent extends HTMLElement {
             return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {torrent: existingTorrent, streamToServerReadyPromise})
           }
         }
-        const torrent = this.client.add(event.detail.torrentId, event.detail.opts, torrent => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {torrent, streamToServerReadyPromise}))
+        const torrent = this.client.add(event.detail.torrentId, Object.assign(event.detail.opts || {}, await this.addOpts), torrent => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {torrent, streamToServerReadyPromise}))
         torrent.on('error', error => console.warn('Webtorrent torrent error:', error))
       })
     }

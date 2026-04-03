@@ -18,15 +18,17 @@ export default class Webtorrent extends HTMLElement {
     let errorCounter = 0
     let errorTimeoutID
     this.errorEventListener = event => {
-      if (event.target.tagName === 'TRACK') return
+      if (event.target?.tagName === 'TRACK') return
       console.warn('Webtorrent view error:', event)
       clearTimeout(errorTimeoutID)
       errorTimeoutID = setTimeout(() => {
+        // clear previous elements
         this.webtorrentTargetElements.forEach(({renderTarget, appendTarget, figureTarget}) => {
           renderTarget.remove()
           appendTarget.remove()
           figureTarget?.remove()
         })
+        this.webtorrentTargetElements = []
         this.clonedElements.forEach(element => element.remove())
         this.section.innerHTML = ''
         this.init(errorCounter)
@@ -36,14 +38,13 @@ export default class Webtorrent extends HTMLElement {
   }
 
   init (errorCounter) {
-    this.hidden = true
-    // TODO: Loading while waiting for torrent to resolve
-    // TODO: Check for navigator.onLine, since offline will prevent torrent to be issued
+    const {appendTarget, renderTarget: progressElement, figureTarget: progressFigure} = Webtorrent.getElement(this, 'progress', 'initializing...', 'progress')
+    this.section.appendChild(appendTarget)
     new Promise(resolve => this.dispatchEvent(new CustomEvent('webtorrent-add', {
       detail: {
-        torrentId: this.getAttribute('torrent-id') || Array.from((new URL(location.href)).searchParams).reduce((acc, curr) => curr[0] === 'torrent-id'
+        torrentId: this.getAttribute('torrent-id') || encodeURI(Array.from((new URL(location.href)).searchParams).reduce((acc, curr) => curr[0] === 'torrent-id'
           ? `${curr[1]}`
-          : `${acc}&${curr[0]}=${curr[1]}`, ''),
+          : `${acc}&${curr[0]}=${curr[1]}`, '')),
         destroy: errorCounter > 2,
         resolve
       },
@@ -51,6 +52,20 @@ export default class Webtorrent extends HTMLElement {
       cancelable: true,
       composed: true
     }))).then(({torrent, streamToServerReadyPromise}) => {
+      const destroy = torrent.destroy.bind(torrent)
+      torrent.destroy = (opts, callback) => destroy(opts, () => {
+        if (callback) callback()
+        this.errorEventListener('torrent got destroyed!')
+      })
+      const intervalID = setInterval(() => {
+        if (torrent.done) {
+          clearInterval(intervalID);
+          (progressFigure || progressElement).remove()
+        }
+        progressElement.setAttribute('value', 100 * torrent.progress)
+        let figcaption
+        if ((figcaption = progressFigure?.querySelector('figcaption'))) figcaption.textContent = `${(100 * torrent.progress).toFixed(1)}%`
+      }, 200)
       const tagName = errorCounter > 3 ? 'a' : ''
       let file
       if ((file = torrent.files.find(file => file.name === this.getAttribute('file-name')))) {
@@ -59,7 +74,6 @@ export default class Webtorrent extends HTMLElement {
         this.webtorrentTargetElements = this.webtorrentTargetElements.concat(Webtorrent.renderFilesTo(torrent, this, this.section, streamToServerReadyPromise, tagName))
       }
       this.webtorrentTargetElements.forEach(({renderTarget}) => renderTarget.addEventListener('error', this.errorEventListener))
-      this.hidden = false
     })
   }
 
@@ -83,7 +97,7 @@ export default class Webtorrent extends HTMLElement {
     const results = torrent.files.map((file, i) => Webtorrent.renderFileTo(file, webComponent, targetContainer, streamToServerReadyPromise, i, tagName, false))
     const videoResults = results.filter(result => result.tagName === 'video')
     if (videoResults.length === 1) {
-      targetContainer.appendChild(videoResults[0].appendTarget)
+      targetContainer.prepend(videoResults[0].appendTarget)
       results.forEach(({renderTarget, appendTarget, figureTarget, tagName, file}) => {
         if (tagName === 'track') {
           videoResults[0].renderTarget.appendChild(renderTarget)
@@ -104,7 +118,7 @@ export default class Webtorrent extends HTMLElement {
           const videoOrAudio = results.find(result => ['audio', 'video'].includes(result.tagName))
           videoOrAudio.renderTarget.appendChild(appendTarget)
         } else {
-          targetContainer.appendChild(appendTarget)
+          targetContainer.prepend(appendTarget)
         }
       })
     }
@@ -123,7 +137,7 @@ export default class Webtorrent extends HTMLElement {
     let targetAttribute
     if (!tagName) [tagName, targetAttribute] = Webtorrent.getTagNameByMimeType(file.type)
     const {renderTarget, appendTarget, figureTarget} = Webtorrent.getElement(webComponent, tagName, file.name, fileCount)
-    if (append) targetContainer.appendChild(appendTarget)
+    if (append) targetContainer.prepend(appendTarget)
     if (tagName === 'a') {
       renderTarget.setAttribute('target', '_blank')
       setHref(renderTarget)
@@ -137,7 +151,7 @@ export default class Webtorrent extends HTMLElement {
       setHref(a)
       a.setAttribute('download', file.name)
       a.textContent = file.name
-      renderTarget.appendChild(a)
+      renderTarget.prepend(a)
       if (streamToServerReadyPromise.done) {
         file.streamTo(renderTarget)
       } else {
@@ -203,39 +217,5 @@ export default class Webtorrent extends HTMLElement {
 
   get clonedElements () {
     return Array.from(this.querySelectorAll('[is-clone]'))
-  }
-
-  // display trumps hidden property, which we resolve here as well as we allow an animation on show
-  set hidden (value) {
-    if (!this._cssHidden) {
-      /** @type {HTMLStyleElement} */
-      this._cssHidden = document.createElement('style')
-      this._cssHidden.setAttribute('_cssHidden', '')
-      this._cssHidden.setAttribute('protected', 'true') // this will avoid deletion by html=''
-      this.root.appendChild(this._cssHidden)
-    }
-    this._cssHidden.textContent = ''
-    value ? this.setAttribute('aria-hidden', 'true') : this.removeAttribute('aria-hidden')
-    this._cssHidden.textContent = value
-      ? /* css */`
-        :host {
-          display: block;
-          visibility: hidden !important;
-        }
-      `
-      : /* css */`
-        :host, :host > *, :host > * > * {
-          animation: var(--show, show .3s ease-out);
-        }
-        @keyframes show {
-          0%{opacity: 0}
-          100%{opacity: 1}
-        }
-      `
-    super.hidden = value
-  }
-
-  get hidden () {
-    return super.hidden
   }
 }
