@@ -18,15 +18,18 @@ export default class Webtorrent extends HTMLElement {
 
     this.client = new WebTorrent()
     this.client.on('error', error => console.warn('Webtorrent client error:', error))
-    let isReadyResolve = map => map
-    const isReadyPromise = new Promise(resolve => (isReadyResolve = resolve))
+    let isStreamToServerReadyResolve = controller => controller
+    /** @type {any} */
+    const streamToServerReadyPromise = new Promise(resolve => (isStreamToServerReadyResolve = resolve))
+    streamToServerReadyPromise.done = false
+    streamToServerReadyPromise.finally(() => (streamToServerReadyPromise.done = true))
     if (navigator.serviceWorker) {
       navigator.serviceWorker.register(this.getAttribute('sw-url') || `${this.importMetaUrl}../../ServiceWorker.js`, { scope: './' })
       navigator.serviceWorker.ready.then(controller => {
         const createServer = () => {
           if (controller.active?.state === 'activated') {
             this.client.createServer({ controller })
-            isReadyResolve(controller)
+            isStreamToServerReadyResolve(controller)
           } else {
             controller.active?.addEventListener('statechange', event => createServer(), {once: true})
           }
@@ -37,17 +40,16 @@ export default class Webtorrent extends HTMLElement {
       console.error('Webtorrent is not working - since there is no navigator.serviceWorker', this)
     }
     
-    this.webtorrentAddEventListener = async event => {
-      await isReadyPromise
+    this.webtorrentAddEventListener = event => {
       this.client.get(event.detail.torrentId).then(existingTorrent => {
         if (existingTorrent) {
-          if (event.detail.error) {
+          if (event.detail.destroy) {
             existingTorrent.destroy()
           } else {
-            return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {torrent: existingTorrent})
+            return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {torrent: existingTorrent, streamToServerReadyPromise})
           }
         }
-        const torrent = this.client.add(event.detail.torrentId, event.detail.opts, torrent => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {torrent}))
+        const torrent = this.client.add(event.detail.torrentId, event.detail.opts, torrent => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {torrent, streamToServerReadyPromise}))
         torrent.on('error', error => console.warn('Webtorrent torrent error:', error))
       })
     }
