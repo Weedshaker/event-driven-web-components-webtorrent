@@ -45,18 +45,13 @@ export default class Webtorrent extends HTMLElement {
         torrentId: this.getAttribute('torrent-id') || encodeURI(Array.from((new URL(location.href)).searchParams).reduce((acc, curr) => curr[0] === 'torrent-id'
           ? `${curr[1]}`
           : `${acc}&${curr[0]}=${curr[1]}`, '')),
-        destroy: errorCounter > 2,
+        destroy: errorCounter > 4 ? {destroyStore: true} : errorCounter > 2 ? {destroyStore: false} : false,
         resolve
       },
       bubbles: true,
       cancelable: true,
       composed: true
     }))).then(({torrent, streamToServerReadyPromise}) => {
-      const destroy = torrent.destroy.bind(torrent)
-      torrent.destroy = (opts, callback) => destroy(opts, () => {
-        if (callback) callback()
-        this.errorEventListener('torrent got destroyed!')
-      })
       const intervalID = setInterval(() => {
         if (torrent.done) {
           clearInterval(intervalID);

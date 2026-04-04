@@ -48,7 +48,9 @@ export default class Webtorrent extends HTMLElement {
 			announce: Array.from(new Set([
         ...trackers,
 				...presetTrackers
-			]))
+			])),
+      destroyStoreOnDestroy: true,
+      addUID: true
 		})).catch(error => ({announce: presetTrackers}))
 
     // service worker stream server
@@ -78,7 +80,7 @@ export default class Webtorrent extends HTMLElement {
       this.client.get(event.detail.torrentId).then(async existingTorrent => {
         if (existingTorrent) {
           if (event.detail.destroy) {
-            existingTorrent.destroy()
+            existingTorrent.destroy(event.detail.destroy)
           } else {
             return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {torrent: existingTorrent, streamToServerReadyPromise})
           }
