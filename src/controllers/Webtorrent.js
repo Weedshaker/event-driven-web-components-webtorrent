@@ -49,8 +49,7 @@ export default class Webtorrent extends HTMLElement {
         ...trackers,
 				...presetTrackers
 			])),
-      destroyStoreOnDestroy: true,
-      addUID: true
+      destroyStoreOnDestroy: false
 		})).catch(error => ({announce: presetTrackers}))
 
     // service worker stream server
@@ -87,6 +86,11 @@ export default class Webtorrent extends HTMLElement {
         }
         const torrent = this.client.add(event.detail.torrentId, Object.assign(event.detail.opts || {}, await this.addOpts), torrent => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {torrent, streamToServerReadyPromise}))
         torrent.on('error', error => console.warn('Webtorrent torrent error:', error))
+        const destroy = torrent.destroy.bind(torrent)
+        torrent.destroy = (opts, callback) => destroy(opts, () => {
+          if (callback) callback()
+          console.log('TODO: update webtorrent localStorage if destroyStore === true', opts?.destroyStore)
+        })
       })
     }
   }
