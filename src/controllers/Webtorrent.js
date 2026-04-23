@@ -3,6 +3,7 @@ import WebTorrent from '../webtorrent/dist/webtorrent.min.js'
 
 /**
  * https://webtorrent.io/docs
+ * hint: clear OPFS "await (await navigator.storage.getDirectory()).remove({ recursive: true })"
  *
  * @export
  * @return {CustomElementConstructor | *}
