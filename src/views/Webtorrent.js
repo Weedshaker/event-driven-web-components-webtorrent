@@ -2,6 +2,11 @@
 import { Intersection } from '../event-driven-web-components-prototypes/src/Intersection.js'
 
 /**
+ * errorCounter starts with 0-2 normal reload of html nodes, 3 reset torrent, 4 render to link instead of video/img/audio, 5 reset OPFS storage and then starts from 0 again.
+ @typedef {0|1|2|3|4|5|number} ErrorCounter
+*/
+
+/**
  * Webtorrent
  * TODO: rebuild all webTorrent desktop controls
  *
@@ -23,20 +28,34 @@ export default class Webtorrent extends Intersection() {
       console.warn('Webtorrent view error:', event, event.target, ':is webworker active?')
       clearTimeout(errorTimeoutID)
       errorTimeoutID = setTimeout(() => {
-        // clear previous elements
-        this.webtorrentTargetElements.forEach(({renderTarget, appendTarget, figureTarget}) => {
-          renderTarget.remove()
-          appendTarget.remove()
-          figureTarget?.remove()
-        })
-        this.webtorrentTargetElements = []
-        this.clonedElements.forEach(element => element.remove())
-        this.summary.innerHTML = ''
-        Array.from(this.progress.children).forEach(child => (child.innerHTML = ''))
         // reset counter after 5
-        this.init(errorCounter % 6)
+        /** @type {ErrorCounter} */
+        const errorCounterStatus = errorCounter % 6
+        // stop cycle after 30 and reaching status 5
+        if (errorCounter < 30 || errorCounterStatus === 5) {
+          this.setAttribute('error', '')
+          if (errorCounterStatus < 4) this.updateHeight()
+          // clear previous elements
+          this.webtorrentTargetElements.forEach(({renderTarget, appendTarget, figureTarget}) => {
+            renderTarget.remove()
+            appendTarget.remove()
+            figureTarget?.remove()
+          })
+          this.webtorrentTargetElements = []
+          this.clonedElements.forEach(element => element.remove())
+          this.summary.innerHTML = ''
+          Array.from(this.progress.children).forEach(child => (child.innerHTML = ''))
+          this.init(errorCounterStatus).then(() => {
+            if (errorCounterStatus < 4) this.removeAttribute('error')
+          })
+        }
         errorCounter++
       }, 2000)
+    }
+
+    this.torrentErrorEventListener = event => {
+      errorCounter = 3 // reset torrent
+      this.errorEventListener(event)
     }
 
     // Avoid DOM performance issues
@@ -47,7 +66,7 @@ export default class Webtorrent extends Intersection() {
         this.customStyleHeight.textContent = ''
         self.requestAnimationFrame(timeStamp => {
           this.customStyleHeight.textContent = /* css */`
-          :host([has-height]:not([intersecting])) {
+          :host([has-height]:not([intersecting])), :host([has-height][error]) > details {
             min-height: ${this.offsetHeight}px;
           }
         `
@@ -73,14 +92,13 @@ export default class Webtorrent extends Intersection() {
   }
 
   // video/img/audio nodes can emit error's, so the first three errors we just reset those
-  // errorCounter starts with 0-2 normal reload of html nodes, 3 reset torrent, 4 render to link instead of video/img/audio, 5 reset OPFS storage and then starts from 0 again.
   init (errorCounter) {
     const {appendTarget: progressTarget, renderTarget: progressElement} = Webtorrent.getElement(this, 'progress', 'initializing...', 'progress', false)
     progressTarget.setAttribute('max', '100')
     let prevElement
     if ((prevElement = this.summary.querySelector(`[name="${progressTarget.getAttribute('name')}"]`))) prevElement.remove()
     this.progressBar.appendChild(progressTarget)
-    new Promise(resolve => this.dispatchEvent(new CustomEvent('webtorrent-add', {
+    return new Promise(resolve => this.dispatchEvent(new CustomEvent('webtorrent-add', {
       detail: {
         torrentId: this.getAttribute('torrent-id') || encodeURI(Array.from((new URL(location.href)).searchParams).reduce((acc, curr) => curr[0] === 'torrent-id'
           ? `${curr[1]}`
@@ -92,7 +110,7 @@ export default class Webtorrent extends Intersection() {
       cancelable: true,
       composed: true
     }))).then(({torrent, streamToServerReadyPromise}) => {
-      torrent.on('error', this.errorEventListener)
+      torrent.on('error', this.torrentErrorEventListener)
       let videosPlaying = []
       this.doOnIntersection = () => {
         clearInterval(this.intervalID)
@@ -109,11 +127,12 @@ export default class Webtorrent extends Intersection() {
         clearInterval(this.intervalID)
       }
       const tagName = errorCounter > 3 ? 'a' : ''
+      const streamDoneFunc = errorCounter < 4 ? this.updateHeight : () => {}
       let file
       if ((file = torrent.files.find(file => file.name === this.getAttribute('file-name')))) {
-        this.webtorrentTargetElements.push(Webtorrent.renderFileTo(file, this, this.summary, streamToServerReadyPromise, undefined, this.updateHeight, tagName))
+        this.webtorrentTargetElements.push(Webtorrent.renderFileTo(file, this, this.summary, streamToServerReadyPromise, undefined, streamDoneFunc, tagName))
       } else {
-        this.webtorrentTargetElements = this.webtorrentTargetElements.concat(Webtorrent.renderFilesTo(torrent, this, this.summary, streamToServerReadyPromise, tagName, this.updateHeight))
+        this.webtorrentTargetElements = this.webtorrentTargetElements.concat(Webtorrent.renderFilesTo(torrent, this, this.summary, streamToServerReadyPromise, tagName, streamDoneFunc))
       }
       this.webtorrentTargetElements.forEach(({renderTarget}) => renderTarget.addEventListener('error', this.errorEventListener))
     })
@@ -191,8 +210,21 @@ export default class Webtorrent extends Intersection() {
       ::slotted([id=reset]) {
         cursor: pointer;
       }
+      ::slotted([id=error]) {
+        display: none;
+        height: 100%;
+        flex: 1;
+      }
+      :host([error]) ::slotted([id=error]) {
+        display: block;
+      }
       :host {
         display: block;
+      }
+      :host > details {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
       }
       :host([has-height]:not([intersecting])) > details {
         display: none;
@@ -226,6 +258,7 @@ export default class Webtorrent extends Intersection() {
     this.html = /* html */`
       <details ${this.hasAttribute('open') ? 'open' : ''}>
         <summary></summary>
+        <a id=error-link><slot name=error></slot></a>
         <div id=controls>
           <div id=progress>
             <div id=progress-bar></div>
@@ -239,8 +272,8 @@ export default class Webtorrent extends Intersection() {
     return Promise.resolve()
   }
 
-  static renderFilesTo (torrent, webComponent, targetContainer, streamToServerReadyPromise, tagName, updateHeightFunc) {
-    const results = torrent.files.map((file, i) => Webtorrent.renderFileTo(file, webComponent, targetContainer, streamToServerReadyPromise, i, updateHeightFunc, tagName, false))
+  static renderFilesTo (torrent, webComponent, targetContainer, streamToServerReadyPromise, tagName, streamDoneFunc) {
+    const results = torrent.files.map((file, i) => Webtorrent.renderFileTo(file, webComponent, targetContainer, streamToServerReadyPromise, i, streamDoneFunc, tagName, false))
     const videoResults = results.filter(result => result.tagName === 'video')
     if (videoResults.length === 1) {
       targetContainer.prepend(videoResults[0].appendTarget)
@@ -271,7 +304,7 @@ export default class Webtorrent extends Intersection() {
     return results
   }
 
-  static renderFileTo (file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, updateHeightFunc, tagName = '', append = true) {
+  static renderFileTo (file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, streamDoneFunc, tagName = '', append = true) {
     // streamTo and streamURL only work when service worker is up and running
     const setHref = target => {
       if (streamToServerReadyPromise.done) {
@@ -304,8 +337,8 @@ export default class Webtorrent extends Intersection() {
         file.blob().then(blob => renderTarget.setAttribute(targetAttribute || 'src', URL.createObjectURL(blob)))
       }
     }
-    file.on('stream', updateHeightFunc)
-    file.on('done', updateHeightFunc)
+    file.on('stream', streamDoneFunc)
+    file.on('done', streamDoneFunc)
     return {renderTarget, appendTarget, figureTarget, file, tagName}
   }
 
