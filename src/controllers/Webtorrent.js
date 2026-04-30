@@ -2,6 +2,49 @@
 import WebTorrent from '../webtorrent/dist/webtorrent.min.js'
 
 /**
+ * @typedef {{
+ *  magnetURI: URL,
+ *  paused: boolean,
+ *  private: {
+ *    name: string,
+ *    origin: {
+ *      room: string,
+ *      publicKey?: any,
+ *      uid?: string | null,
+ *      nickname?: string,
+ *      timestamp: number,
+ *      self: boolean
+ *    },
+ *    shared?: {
+ *      room: string,
+ *      publicKey: any,
+ *      uid: string | null,
+ *      nickname: string,
+ *      timestamp: number
+ *    }[],
+ *    received?: {
+ *      room: string,
+ *      publicKey: any,
+ *      uid: string | null,
+ *      nickname: string,
+ *      timestamp: number
+ *    }[],
+ *    encrypted?: {
+ *      room: string,
+ *      timestamp: number
+ *    }[],
+ *    decrypted?: {
+ *      room: string,
+ *      uid?: string | null,
+ *      nickname?: string,
+ *      timestamp: number
+ *    }[]
+ *  },
+ *  public: {name: string},
+ * }} WEBTORRENT_CONTAINER
+ */
+
+/**
  * https://webtorrent.io/docs
  * hint: clear OPFS "await (await navigator.storage.getDirectory()).remove({ recursive: true })"
  *
