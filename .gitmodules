@@ -1,6 +1,6 @@
-[submodule "src/webtorrent"]
-	path = src/webtorrent
-	url = https://github.com/webtorrent/webtorrent.git
 [submodule "src/event-driven-web-components-prototypes"]
 	path = src/event-driven-web-components-prototypes
 	url = git@github.com:Weedshaker/event-driven-web-components-prototypes.git
+[submodule "src/webtorrent"]
+	path = src/webtorrent
+	url = git@github.com:Weedshaker/webtorrent.git
