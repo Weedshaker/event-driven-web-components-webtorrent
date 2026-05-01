@@ -112,12 +112,14 @@ export default class Webtorrent extends Intersection() {
     }))).then(({torrent, streamToServerReadyPromise}) => {
       torrent.on('error', this.torrentErrorEventListener)
       let videosPlaying = []
+      this.fileNameEl.textContent = torrent.files.reduce((acc, file) => `${acc}${acc ? ', ' : ''}${file.name}`, '')
       this.doOnIntersection = () => {
         clearInterval(this.intervalID)
         this.intervalID = setInterval(() => {
-          if (torrent.done) clearInterval(this.intervalID);
+          //if (torrent.done) clearInterval(this.intervalID);
           progressElement.setAttribute('value', 100 * torrent.progress)
-          this.progressText.textContent = `${(100 * torrent.progress).toFixed(1)}%`;
+          this.progressText.textContent = `${(100 * torrent.progress).toFixed(1)}%`
+          this.peersEl.innerText = `${torrent.numPeers} peer${torrent.numPeers === 1 ? '' : 's'}`
           if (!this.hasAttribute('no-video-auto-pause')) videosPlaying.forEach(video => video.play())
         }, 200)
       }
@@ -220,6 +222,7 @@ export default class Webtorrent extends Intersection() {
       }
       :host {
         display: block;
+        white-space: normal;
       }
       :host > details {
         display: flex;
@@ -228,6 +231,26 @@ export default class Webtorrent extends Intersection() {
       }
       :host([has-height]:not([intersecting])) > details {
         display: none;
+      }
+      :host > details > #controls {
+        display: flex;
+        gap: 1em;
+      }
+      :host > details > #controls > #progress {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 1em;
+      }
+      :host > details > #controls > #progress > #progress-bar {
+        flex: 1;
+        display: flex;
+      }
+      :host > details > #controls > #progress > #progress-bar > progress {
+        min-width: 100%;
+      }
+      :host > details > #controls > #progress > :where(#progress-text, #peers) {
+        flex-shrink: 0;
       }
       @media only screen and (max-width: _max-width_) {
         
@@ -263,6 +286,8 @@ export default class Webtorrent extends Intersection() {
           <div id=progress>
             <div id=progress-bar></div>
             <div id=progress-text></div>
+            <div id=peers></div>
+            <div id=file-name></div>
           </div>
           <a id=reset-link><slot name=reset></slot></a>
         </div>
@@ -295,7 +320,7 @@ export default class Webtorrent extends Intersection() {
       results.forEach(({appendTarget, tagName}) => {
         if (tagName === 'track') {
           const videoOrAudio = results.find(result => ['audio', 'video'].includes(result.tagName))
-          videoOrAudio.renderTarget.appendChild(appendTarget)
+          if (videoOrAudio) videoOrAudio.renderTarget.appendChild(appendTarget)
         } else {
           targetContainer.prepend(appendTarget)
         }
@@ -314,7 +339,7 @@ export default class Webtorrent extends Intersection() {
       }
     }
     let targetAttribute
-    if (!tagName) [tagName, targetAttribute] = Webtorrent.getTagNameByMimeType(file.type)
+    if (!tagName) [tagName, targetAttribute] = Webtorrent.getTagNameByMimeType(file.type, file.path)
     const {renderTarget, appendTarget, figureTarget} = Webtorrent.getElement(webComponent, tagName, file.name, fileCount)
     if (append) targetContainer.prepend(appendTarget)
     if (tagName === 'a') {
@@ -401,7 +426,14 @@ export default class Webtorrent extends Intersection() {
     return {slot, target}
   }
 
-  static getTagNameByMimeType (type) {
+  static getTagNameByMimeType (type, path) {
+    const match = path.match(/\.[a-z]{3}$/)
+    if (match?.[0]) {
+      if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.avif', '.svg', '.ico'].includes(match[0])) return ['img', 'src']
+      if (['.mp4', '.mkv', '.mov', '.avi', '.wmv', '.flv', '.webm', '.divx'].includes(match[0])) return ['video', 'src']
+      if (['.mp3', '.wav', '.ogg', '.oga', '.aac', '.m4a', '.flac'].includes(match[0])) return ['audio', 'src']
+      if (['.pdf', '.html', '.htm', '.svg', '.xml', '.txt'].includes(match[0])) return ['embed', 'src']
+    }
     return type.includes('image')
       ? ['img', 'src']
       : type.includes('video')
@@ -433,6 +465,14 @@ export default class Webtorrent extends Intersection() {
 
   get progressText () {
     return this._progressText || (this._progressText = this.details.querySelector('#progress-text'))
+  }
+
+  get peersEl () {
+    return this._peersEl || (this._peersEl = this.details.querySelector('#peers'))
+  }
+
+  get fileNameEl () {
+    return this._fileNameEl || (this._fileNameEl = this.details.querySelector('#file-name'))
   }
 
   get resetLink () {
