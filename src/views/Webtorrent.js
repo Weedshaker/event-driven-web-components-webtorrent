@@ -34,7 +34,8 @@ export default class Webtorrent extends Intersection() {
         // stop cycle after 30 and reaching status 5
         if (errorCounter < 30 || errorCounterStatus === 5) {
           this.setAttribute('error', '')
-          if (errorCounterStatus < 4) this.updateHeight()
+          this.updateHeight()
+          clearInterval(this.intervalID)
           // clear previous elements
           this.webtorrentTargetElements.forEach(({renderTarget, appendTarget, figureTarget}) => {
             renderTarget.remove()
@@ -129,7 +130,7 @@ export default class Webtorrent extends Intersection() {
         clearInterval(this.intervalID)
       }
       const tagName = errorCounter > 3 ? 'a' : ''
-      const streamDoneFunc = errorCounter < 4 ? this.updateHeight : () => {}
+      const streamDoneFunc = () => this.updateHeight()
       let file
       if ((file = torrent.files.find(file => file.name === this.getAttribute('file-name')))) {
         this.webtorrentTargetElements.push(Webtorrent.renderFileTo(file, this, this.summary, streamToServerReadyPromise, undefined, streamDoneFunc, tagName))
@@ -205,8 +206,10 @@ export default class Webtorrent extends Intersection() {
    */
   renderCSS () {
     this.css = /* css */`
-      ::slotted(video), ::slotted(audio), ::slotted(img), :where(video, audio, img) {
+      ::slotted(video), ::slotted(img), :where(video, img) {
         height: auto;
+      }
+      ::slotted(video), ::slotted(audio), ::slotted(img), :where(video, audio, img) {
         width: 100%;
       }
       ::slotted([id=reset]) {

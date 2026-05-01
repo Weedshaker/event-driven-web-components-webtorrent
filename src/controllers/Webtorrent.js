@@ -4,6 +4,7 @@ import WebTorrent from '../webtorrent/dist/webtorrent.min.js'
 /**
  * @typedef {{
  *  magnetURI: URL,
+ *  torrentFile: Uint8Array,
  *  paused: boolean,
  *  private: {
  *    name: string,
@@ -47,6 +48,25 @@ import WebTorrent from '../webtorrent/dist/webtorrent.min.js'
 /**
  * https://webtorrent.io/docs
  * hint: clear OPFS "await (await navigator.storage.getDirectory()).remove({ recursive: true })"
+ * 
+    async function listAllOPFSFiles(dirHandle, path = "") {
+      for await (const [name, handle] of dirHandle.entries()) {
+        const fullPath = path + name;
+
+        if (handle.kind === "file") {
+          console.log("file:", fullPath);
+        } else if (handle.kind === "directory") {
+          console.log("dir:", fullPath + "/");
+          await listAllOPFSFiles(handle, fullPath + "/");
+        }
+      }
+    }
+    // Entry point
+    async function logOPFS() {
+      const root = await navigator.storage.getDirectory();
+      await listAllOPFSFiles(root);
+    }
+    logOPFS();
  *
  * @export
  * @return {CustomElementConstructor | *}
@@ -128,6 +148,7 @@ export default class Webtorrent extends HTMLElement {
             return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {torrent: existingTorrent, streamToServerReadyPromise})
           }
         }
+        // TODO: save info to localStorage must include torrentFile Uint8Array for resurrection (save the torrentFile to Webtorrent_Container by torrent.on('metadata',...))
         const torrent = this.client.add(event.detail.torrentId, Object.assign(event.detail.opts || {}, await this.addOpts), torrent => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {torrent, streamToServerReadyPromise}))
         torrent.on('error', error => console.warn('Webtorrent torrent error:', error))
       })
