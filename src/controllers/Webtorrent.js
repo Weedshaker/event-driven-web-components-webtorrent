@@ -3,7 +3,7 @@ import WebTorrent from '../webtorrent/dist/webtorrent.min.js'
 
 /**
  * @typedef {{
- *  magnetURI: URL,
+ *  infoHash: string,
  *  torrentFile: Uint8Array,
  *  paused: boolean,
  *  private: {

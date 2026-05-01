@@ -335,7 +335,7 @@ export default class Webtorrent extends Intersection() {
   static renderFileTo (file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, streamDoneFunc, tagName = '', append = true) {
     // streamTo and streamURL only work when service worker is up and running
     const setHref = target => {
-      if (streamToServerReadyPromise.done) {
+      if (streamToServerReadyPromise.done && !/OS 16_/.test(navigator.userAgent)) {
         target.setAttribute('href', file.streamURL)
       } else {
         file.blob().then(blob => target.setAttribute('href', URL.createObjectURL(blob)))
