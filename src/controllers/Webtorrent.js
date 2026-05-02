@@ -3,45 +3,12 @@ import WebTorrent from '../webtorrent/dist/webtorrent.min.js'
 
 /**
  * @typedef {{
- *  infoHash: string,
  *  torrentFile: Uint8Array,
- *  paused: boolean,
- *  private: {
- *    name: string,
- *    origin: {
- *      room: string,
- *      publicKey?: any,
- *      uid?: string | null,
- *      nickname?: string,
- *      timestamp: number,
- *      self: boolean
- *    },
- *    shared?: {
- *      room: string,
- *      publicKey: any,
- *      uid: string | null,
- *      nickname: string,
- *      timestamp: number
- *    }[],
- *    received?: {
- *      room: string,
- *      publicKey: any,
- *      uid: string | null,
- *      nickname: string,
- *      timestamp: number
- *    }[],
- *    encrypted?: {
- *      room: string,
- *      timestamp: number
- *    }[],
- *    decrypted?: {
- *      room: string,
- *      uid?: string | null,
- *      nickname?: string,
- *      timestamp: number
- *    }[]
- *  },
- *  public: {name: string},
+ *  added: {
+ *    href: string,
+ *    timestamp: number,
+ *    uid?: string | null
+ *  }[]
  * }} WEBTORRENT_CONTAINER
  */
 
@@ -139,18 +106,77 @@ export default class Webtorrent extends HTMLElement {
       console.warn('Webtorrent is not working - since there is no navigator.serviceWorker', this)
     }
     
-    this.webtorrentAddEventListener = event => {
+    const torrentIdMap =  new Map()
+    this.webtorrentAddEventListener = async event => {
+      if (torrentIdMap.has(event.detail.torrentId)) return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, await torrentIdMap.get(event.detail.torrentId))
       this.client.get(event.detail.torrentId).then(async existingTorrent => {
+        // handle possible existing torrent
         if (existingTorrent) {
           if (event.detail.destroyOpts) {
             existingTorrent.destroy(event.detail.destroyOpts) // If opts.destroyStore is specified, it will override opts.destroyStoreOnDestroy passed when the torrent was added.
           } else {
-            return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {torrent: existingTorrent, streamToServerReadyPromise})
+            const result = {torrent: existingTorrent, streamToServerReadyPromise}
+            torrentIdMap.set(event.detail.torrentId, Promise.resolve(result))
+            const respond = () => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, result)
+            if (existingTorrent.infoHash) return respond()
+            return existingTorrent.on('infoHash', respond)
           }
         }
-        // TODO: save info to localStorage must include torrentFile Uint8Array for resurrection (save the torrentFile to Webtorrent_Container by torrent.on('metadata',...))
-        const torrent = this.client.add(event.detail.torrentId, Object.assign(event.detail.opts || {}, await this.addOpts), torrent => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {torrent, streamToServerReadyPromise}))
+        let torrentIdMapResolve
+        torrentIdMap.set(event.detail.torrentId, new Promise(resolve => (torrentIdMapResolve = resolve)))
+        // figure out the torrentId, best to get torrentFile from storage to resurrect torrent
+        let torrentId = event.detail.torrentId
+        if (typeof torrentId === 'string') {
+          let infoHash = torrentId
+          try {
+            const torrentIdUrl = new URL(torrentId)
+            let xt
+            if ((xt = torrentIdUrl.searchParams.get('xt'))) {
+              infoHash = xt.replace('urn:btih:', '')
+            }
+          } catch (error) {}
+          /** @type {WEBTORRENT_CONTAINER} */
+          const torrentContainer = await new Promise(resolve => this.dispatchEvent(new CustomEvent('storage-get', {
+            detail: {
+              key: `${this.namespace}torrents`,
+              resolve
+            },
+            bubbles: true,
+            cancelable: true,
+            composed: true
+          }))).then(result => result.value[infoHash])
+          if (torrentContainer) {
+            torrentId = new Uint8Array(torrentContainer.torrentFile)
+          }
+        }
+        const torrent = this.client.add(torrentId, Object.assign(event.detail.opts || {}, await this.addOpts))
+        // save to storage
+        // TODO: only concat: 'unshift', maxLength: 20 for added but not torrentFile
+        torrent.on('metadata', () => this.dispatchEvent(new CustomEvent('storage-merge', {
+          detail: {
+            key: `${this.namespace}torrents`,
+            value: {
+              [torrent.infoHash]: {
+                torrentFile: Array.from(torrent.torrentFile),
+                added: [{
+                  href: location.href,
+                  timestamp: Date.now(),
+                  uid: event.detail.uid
+                }]
+              }
+            }
+          },
+          bubbles: true,
+          cancelable: true,
+          composed: true
+        })))
         torrent.on('error', error => console.warn('Webtorrent torrent error:', error))
+        const result = {torrent, streamToServerReadyPromise}
+        // @ts-ignore
+        torrentIdMapResolve(result)
+        const respond = () => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, result)
+        if (torrent.infoHash) return respond()
+        return torrent.on('infoHash', respond)
       })
     }
   }

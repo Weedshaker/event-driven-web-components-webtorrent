@@ -44,7 +44,7 @@ export default class Webtorrent extends Intersection() {
           })
           this.webtorrentTargetElements = []
           this.clonedElements.forEach(element => element.remove())
-          this.summary.innerHTML = ''
+          this.summary.innerHTML = '<div id=file-name></div>'
           Array.from(this.progress.children).forEach(child => (child.innerHTML = ''))
           this.init(errorCounterStatus).then(() => {
             if (errorCounterStatus < 4) this.removeAttribute('error')
@@ -112,13 +112,13 @@ export default class Webtorrent extends Intersection() {
       composed: true
     }))).then(({torrent, streamToServerReadyPromise}) => {
       torrent.on('error', this.torrentErrorEventListener)
+      torrent.on('done', () => this.details.removeAttribute('open'))
       let videosPlaying = []
-      this.fileNameEl.textContent = torrent.files.reduce((acc, file) => `${acc}${acc ? ', ' : ''}${file.name}`, '')
+      this.fileNameEl.textContent = torrent.name
       this.doOnIntersection = () => {
         clearInterval(this.intervalID)
         this.intervalID = setInterval(() => {
-          //if (torrent.done) clearInterval(this.intervalID);
-          progressElement.setAttribute('value', 100 * torrent.progress)
+          if (torrent.metadata) progressElement.setAttribute('value', 100 * torrent.progress)
           this.progressText.textContent = `${(100 * torrent.progress).toFixed(1)}%`
           this.peersEl.innerText = `${torrent.numPeers} peer${torrent.numPeers === 1 ? '' : 's'}`
           if (!this.hasAttribute('no-video-auto-pause')) videosPlaying.forEach(video => video.play())
@@ -131,13 +131,20 @@ export default class Webtorrent extends Intersection() {
       }
       const tagName = errorCounter > 3 ? 'a' : ''
       const streamDoneFunc = () => this.updateHeight()
-      let file
-      if ((file = torrent.files.find(file => file.name === this.getAttribute('file-name')))) {
-        this.webtorrentTargetElements.push(Webtorrent.renderFileTo(file, this, this.summary, streamToServerReadyPromise, undefined, streamDoneFunc, tagName))
-      } else {
-        this.webtorrentTargetElements = this.webtorrentTargetElements.concat(Webtorrent.renderFilesTo(torrent, this, this.summary, streamToServerReadyPromise, tagName, streamDoneFunc))
+      const renderFiles = () => {
+        let file
+        if ((file = torrent.files.find(file => file.name === this.getAttribute('file-name')))) {
+          this.webtorrentTargetElements.push(Webtorrent.renderFileTo(file, this, this.summary, streamToServerReadyPromise, undefined, streamDoneFunc, tagName))
+        } else {
+          this.webtorrentTargetElements = this.webtorrentTargetElements.concat(Webtorrent.renderFilesTo(torrent, this, this.summary, streamToServerReadyPromise, tagName, streamDoneFunc))
+        }
+        this.webtorrentTargetElements.forEach(({renderTarget}) => renderTarget.addEventListener('error', this.errorEventListener))
       }
-      this.webtorrentTargetElements.forEach(({renderTarget}) => renderTarget.addEventListener('error', this.errorEventListener))
+      if (torrent.ready) {
+        renderFiles()
+      } else {
+        torrent.on('ready', renderFiles)
+      }
     })
   }
 
@@ -283,14 +290,15 @@ export default class Webtorrent extends Intersection() {
   renderHTML (nickname) {
     this.html = /* html */`
       <details ${this.hasAttribute('open') ? 'open' : ''}>
-        <summary></summary>
+        <summary>
+          <div id=file-name></div>
+        </summary>
         <a id=error-link><slot name=error></slot></a>
         <div id=controls>
           <div id=progress>
             <div id=progress-bar></div>
             <div id=progress-text></div>
             <div id=peers></div>
-            <div id=file-name></div>
           </div>
           <a id=reset-link><slot name=reset></slot></a>
         </div>
@@ -475,7 +483,7 @@ export default class Webtorrent extends Intersection() {
   }
 
   get fileNameEl () {
-    return this._fileNameEl || (this._fileNameEl = this.details.querySelector('#file-name'))
+    return this.details.querySelector('#file-name')
   }
 
   get resetLink () {
