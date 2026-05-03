@@ -52,7 +52,6 @@ export default class Webtorrent extends HTMLElement {
 
     const presetTrackers = [
       'wss://tracker.openwebtorrent.com',
-      'wss://tracker.btorrent.xyz',
       'wss://tracker.webtorrent.dev',
       'udp://tracker.opentrackr.org:1337/announce',
       'udp://9.rarbg.com:2810/announce',
