@@ -107,6 +107,27 @@ export default class Webtorrent extends HTMLElement {
     } else {
       console.warn('Webtorrent is not working - since there is no navigator.serviceWorker', this)
     }
+
+    // TODO: only concat: 'unshift', maxLength: 20 for added but not torrentFile
+    // save to storage
+    const torrentOnMetadata = (torrent, uid) => this.dispatchEvent(new CustomEvent('storage-merge', {
+      detail: {
+        key: `${this.namespace}torrents`,
+        value: {
+          [torrent.infoHash]: {
+            torrentFile: Array.from(torrent.torrentFile),
+            added: [{
+              href: location.href,
+              timestamp: Date.now(),
+              uid
+            }]
+          }
+        }
+      },
+      bubbles: true,
+      cancelable: true,
+      composed: true
+    }))
     
     const torrentIdMap =  new Map()
     this.webtorrentAddEventListener = async event => {
@@ -115,6 +136,8 @@ export default class Webtorrent extends HTMLElement {
         // handle possible existing torrent
         if (existingTorrent) {
           if (event.detail.destroyOpts) {
+            torrentIdMap.delete(existingTorrent.infoHash)
+            torrentIdMap.delete(existingTorrent.magnetURI)
             existingTorrent.destroy(event.detail.destroyOpts) // If opts.destroyStore is specified, it will override opts.destroyStoreOnDestroy passed when the torrent was added.
           } else {
             const result = {torrent: existingTorrent, streamToServerReadyPromise}
@@ -153,25 +176,7 @@ export default class Webtorrent extends HTMLElement {
         }
         const torrent = this.client.add(torrentId, Object.assign(event.detail.opts || {}, await this.addOpts))
         // save to storage
-        // TODO: only concat: 'unshift', maxLength: 20 for added but not torrentFile
-        torrent.on('metadata', () => this.dispatchEvent(new CustomEvent('storage-merge', {
-          detail: {
-            key: `${this.namespace}torrents`,
-            value: {
-              [torrent.infoHash]: {
-                torrentFile: Array.from(torrent.torrentFile),
-                added: [{
-                  href: location.href,
-                  timestamp: Date.now(),
-                  uid: event.detail.uid
-                }]
-              }
-            }
-          },
-          bubbles: true,
-          cancelable: true,
-          composed: true
-        })))
+        torrent.on('metadata', () => torrentOnMetadata(torrent, event.detail.uid))
         torrent.on('error', error => console.warn('Webtorrent torrent error:', error))
         const result = {torrent, streamToServerReadyPromise}
         // @ts-ignore
@@ -183,7 +188,10 @@ export default class Webtorrent extends HTMLElement {
     }
 
     this.webtorrentSeedEventListener = async event => {
-      let torrent = this.client.seed(event.detail.input, Object.assign(event.detail.opts || {}, await this.addOpts))
+      let addOpts
+      let torrent = this.client.seed(event.detail.input, Object.assign(event.detail.opts || {}, (addOpts = await this.addOpts)))
+      // save to storage
+      torrent.on('metadata', () => torrentOnMetadata(torrent, event.detail.uid))
       const result = {torrent}
       let checkTorrentDestroyedTimeoutId = null
       const respond = () => {
@@ -191,11 +199,23 @@ export default class Webtorrent extends HTMLElement {
         return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, result)
       }
       checkTorrentDestroyedTimeoutId = setTimeout(() => {
+        // only way to detect that this torrent already exists, is by looking for the destroyed property
         if (torrent.destroyed) {
           const existingTorrent = this.client.torrents.find(torrent => Array.from(event.detail.input).find(file => file.name === torrent.name))
           if (existingTorrent) {
-            result.torrent = existingTorrent
-            respond()
+            if (existingTorrent.done) {
+              result.torrent = existingTorrent
+              respond()
+            } else {
+              torrentIdMap.delete(existingTorrent.infoHash)
+              torrentIdMap.delete(existingTorrent.magnetURI)
+              existingTorrent.destroy()
+              result.torrent = this.client.seed(event.detail.input, Object.assign(event.detail.opts || {}, addOpts))
+              // save to storage
+              result.torrent.on('metadata', () => torrentOnMetadata(result.torrent, event.detail.uid))
+              if (result.torrent.infoHash) return respond()
+              return result.torrent.on('infoHash', respond)
+            }
           }
         }
       }, 200)
