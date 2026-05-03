@@ -51,7 +51,6 @@ export default class Webtorrent extends HTMLElement {
     this.client.on('error', error => console.warn('Webtorrent client error:', error))
 
     const presetTrackers = [
-      'https://tracker.peerweb.site',
       'wss://tracker.peerweb.site'
     ]
     this.addOpts = fetch('https://cdn.jsdelivr.net/gh/ngosang/trackerslist@master/trackers_best.txt').then(response => {
@@ -64,8 +63,6 @@ export default class Webtorrent extends HTMLElement {
 			])),
       destroyStoreOnDestroy: false
 		})).catch(error => ({announce: presetTrackers}))
-    console.log('*********', this.addOpts)
-
     // service worker stream server
     let isStreamToServerReadyResolve = controller => controller
     /** @type {any} */
