@@ -33,6 +33,7 @@ export default class Webtorrent extends Intersection() {
         const errorCounterStatus = errorCounter % 6
         // stop cycle after 30 and reaching status 5
         if (errorCounter < 30 || errorCounterStatus === 5) {
+          // TODO: reset the html media element the first 1, 2 errors
           this.setAttribute('error', '')
           this.updateHeight()
           clearInterval(this.intervalID)
@@ -149,6 +150,7 @@ export default class Webtorrent extends Intersection() {
   }
 
   connectedCallback() {
+    // TODO: message connect don't destroy webtorrent view but safe it away.
     super.connectedCallback()
     this.hidden = true
     const showPromises = []

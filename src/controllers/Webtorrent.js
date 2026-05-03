@@ -51,6 +51,9 @@ export default class Webtorrent extends HTMLElement {
     this.client.on('error', error => console.warn('Webtorrent client error:', error))
 
     const presetTrackers = [
+      'wss://tracker.openwebtorrent.com',
+      'wss://tracker.btorrent.xyz',
+      'wss://tracker.webtorrent.dev',
       'udp://tracker.opentrackr.org:1337/announce',
       'udp://9.rarbg.com:2810/announce',
       'udp://tracker.torrent.eu.org:451/announce',
