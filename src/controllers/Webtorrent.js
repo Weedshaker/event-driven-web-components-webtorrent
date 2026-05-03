@@ -51,39 +51,20 @@ export default class Webtorrent extends HTMLElement {
     this.client.on('error', error => console.warn('Webtorrent client error:', error))
 
     const presetTrackers = [
-      'wss://tracker.openwebtorrent.com',
-      'wss://tracker.webtorrent.dev',
-      'udp://tracker.opentrackr.org:1337/announce',
-      'udp://9.rarbg.com:2810/announce',
-      'udp://tracker.torrent.eu.org:451/announce',
-      'udp://tracker.moeking.me:6969/announce',
-      'udp://tracker.dler.org:6969/announce',
-      'udp://tracker.altrosky.nl:6969/announce',
-      'udp://p4p.arenabg.com:1337/announce',
-      'udp://opentracker.i2p.rocks:6969/announce',
-      'udp://open.stealth.si:80/announce',
-      'udp://open.demonii.com:1337/announce',
-      'udp://explodie.org:6969/announce',
-      'udp://exodus.desync.com:6969/announce',
-      'https://tracker.nanoha.org:443/announce',
-      'https://tracker.lilithraws.org:443/announce',
-      'https://tr.burnabyhighstar.com:443/announce',
-      'https://opentracker.i2p.rocks:443/announce',
-      'http://tracker1.bt.moack.co.kr:80/announce',
-      'http://tracker.mywaifu.best:6969/announce',
-      'udp://zecircle.xyz:6969/announce',
-      'udp://www.peckservers.com:9000/announce'
+      'https://tracker.peerweb.site',
+      'wss://tracker.peerweb.site'
     ]
     this.addOpts = fetch('https://cdn.jsdelivr.net/gh/ngosang/trackerslist@master/trackers_best.txt').then(response => {
         if (response.status >= 200 && response.status <= 299) return response.text()
         throw new Error(response.statusText)
     }).then(text => text.split('\n').filter(text => text)).then(trackers => ({
 			announce: Array.from(new Set([
-        ...trackers,
-				...presetTrackers
+				...presetTrackers,
+        ...trackers
 			])),
       destroyStoreOnDestroy: false
 		})).catch(error => ({announce: presetTrackers}))
+    console.log('*********', this.addOpts)
 
     // service worker stream server
     let isStreamToServerReadyResolve = controller => controller

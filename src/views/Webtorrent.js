@@ -119,6 +119,7 @@ export default class Webtorrent extends Intersection() {
       this.doOnIntersection = () => {
         clearInterval(this.intervalID)
         this.intervalID = setInterval(() => {
+          // todo: if torrent.destroyed go and search replacement at controller eg.: const existingTorrent = this.client.torrents.find(torrent => Array.from(event.detail.input).find(file => file.name === torrent.name))
           if (torrent.metadata) progressElement.setAttribute('value', 100 * torrent.progress)
           this.progressText.textContent = `${(100 * torrent.progress).toFixed(1)}%`
           this.peersEl.innerText = `${torrent.numPeers} peer${torrent.numPeers === 1 ? '' : 's'}`
