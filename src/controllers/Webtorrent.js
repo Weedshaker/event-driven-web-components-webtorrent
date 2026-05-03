@@ -181,14 +181,37 @@ export default class Webtorrent extends HTMLElement {
         return torrent.on('infoHash', respond)
       })
     }
+
+    this.webtorrentSeedEventListener = async event => {
+      let torrent = this.client.seed(event.detail.input, Object.assign(event.detail.opts || {}, await this.addOpts))
+      const result = {torrent}
+      let checkTorrentDestroyedTimeoutId = null
+      const respond = () => {
+        clearTimeout(checkTorrentDestroyedTimeoutId)
+        return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, result)
+      }
+      checkTorrentDestroyedTimeoutId = setTimeout(() => {
+        if (torrent.destroyed) {
+          const existingTorrent = this.client.torrents.find(torrent => Array.from(event.detail.input).find(file => file.name === torrent.name))
+          if (existingTorrent) {
+            result.torrent = existingTorrent
+            respond()
+          }
+        }
+      }, 200)
+      if (torrent.infoHash) return respond()
+      return torrent.on('infoHash', respond)
+    }
   }
 
   connectedCallback () {
     this.addEventListener(`${this.namespace}add`, this.webtorrentAddEventListener)
+    this.addEventListener(`${this.namespace}seed`, this.webtorrentSeedEventListener)
   }
 
   disconnectedCallback () {
     this.removeEventListener(`${this.namespace}add`, this.webtorrentAddEventListener)
+    this.removeEventListener(`${this.namespace}seed`, this.webtorrentSeedEventListener)
   }
 
   /**
