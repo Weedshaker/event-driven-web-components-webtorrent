@@ -21,6 +21,7 @@ export default class Webtorrent extends Intersection() {
     /** @type {{renderTarget, appendTarget, figureTarget, file, tagName}[]} */
     this.webtorrentTargetElements = []
 
+    // TODO: fix error handling, separate for fileErrors, torrentErrors and resetLink
     let errorCounter = 0
     let errorTimeoutID
     this.errorEventListener = event => {
@@ -100,6 +101,7 @@ export default class Webtorrent extends Intersection() {
     let prevElement
     if ((prevElement = this.summary.querySelector(`[name="${progressTarget.getAttribute('name')}"]`))) prevElement.remove()
     this.progressBar.appendChild(progressTarget)
+    console.log('*****errorCounter****', errorCounter, errorCounter > 4 ? {destroyStore: true} : errorCounter > 2 ? {destroyStore: false} : false)
     return new Promise(resolve => this.dispatchEvent(new CustomEvent('webtorrent-add', {
       detail: {
         torrentId: this.getAttribute('torrent-id') || encodeURI(Array.from((new URL(location.href)).searchParams).reduce((acc, curr) => curr[0] === 'torrent-id'
