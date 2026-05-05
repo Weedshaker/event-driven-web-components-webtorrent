@@ -18,7 +18,7 @@ import { WebWorker } from '../event-driven-web-components-prototypes/src/WebWork
  * }} WEBTORRENT_CONTAINER
  */
 
-// todo: reconnect client after offline, avoid timeout but listen to torrent event at seed function. trystero add own tracker
+// todo: reconnect client after offline
 /**
  * https://webtorrent.io/docs
  * hint: clear OPFS "await (await navigator.storage.getDirectory()).remove({ recursive: true })"
@@ -127,7 +127,7 @@ export default class Webtorrent extends WebWorker() {
       // figure out the torrentId, best to get torrentFile from storage to resurrect torrent
       /** @type {WEBTORRENT_CONTAINER} */
       const torrentContainer = await this.webWorker(Webtorrent.loadTorrentFile, infoHash)
-      if (torrentContainer) torrentId = new Uint8Array(torrentContainer.torrentFile)
+      if (torrentContainer?.torrentFile) torrentId = new Uint8Array(torrentContainer.torrentFile)
       const torrent = this.client.add(torrentId, Object.assign(event.detail.opts || {}, await this.addOpts))
       const result = {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise}
       torrentMapResolve(result)
@@ -144,10 +144,11 @@ export default class Webtorrent extends WebWorker() {
       // save to storage
       torrent.on('metadata', () => this.webWorker(Webtorrent.saveTorrentFile, torrent.infoHash, torrent.torrentFile, location.href, event.detail.uid, event.detail.room, true))
       torrent.on('error', error => console.warn('Webtorrent torrent error:', error))
-      let checkTorrentDestroyedTimeoutId = null
-      checkTorrentDestroyedTimeoutId = setTimeout(async () => {
+      // no event like warning or error is fired from webtorrent as well as destroy has no event
+      const checkTorrentDestroyedIntervalId = setInterval(async () => {
         // to detect that this torrent already exists, is by looking for the destroyed property or else the infoHash would have to be precalculated
         if (torrent.destroyed) {
+          clearInterval(checkTorrentDestroyedIntervalId)
           const existingTorrent = this.client.torrents.find(torrent => Array.from(event.detail.input).find(file => file.name === torrent.name))
           if (existingTorrent) {
             if (existingTorrent.done) {
@@ -165,8 +166,8 @@ export default class Webtorrent extends WebWorker() {
             }
           }
         }
-        this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise}, torrent)
       }, 200)
+      this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise}, torrent, () => clearInterval(checkTorrentDestroyedIntervalId))
     }
   }
 
@@ -225,10 +226,12 @@ export default class Webtorrent extends WebWorker() {
    * @param {string|undefined} name
    * @param {any} detail
    * @param {any} torrent
+   * @param {() => void} [callback = () => {}]
    * @return {Promise<void>}
    */
-  respond (resolve, dispatch, name, detail, torrent) {
+  respond (resolve, dispatch, name, detail, torrent, callback = () => {}) {
     const respond = async () => {
+      callback()
       if (typeof resolve === 'function') {
         if (dispatch) {
           resolve(detail)
@@ -299,7 +302,7 @@ export default class Webtorrent extends WebWorker() {
     try {
       return JSON.parse(new TextDecoder().decode(buffer) || '{}')
     } catch (error) {
-      return null
+      return {}
     }
   }
 

@@ -121,6 +121,8 @@ export default class Webtorrent extends Intersection() {
       let videosPlaying = []
       this.fileNameEl.textContent = torrent.name
       this.doOnIntersection = () => {
+        // TODO: avoid interval if possible but listen to more events on torrent or files
+        // TODO: after files loaded keep scroll
         clearInterval(this.intervalID)
         this.intervalID = setInterval(() => {
           // todo: if torrent.destroyed go and search replacement at controller eg.: const existingTorrent = this.client.torrents.find(torrent => Array.from(event.detail.input).find(file => file.name === torrent.name))
