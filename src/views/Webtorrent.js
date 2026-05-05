@@ -38,6 +38,7 @@ export default class Webtorrent extends Intersection() {
           this.setAttribute('error', '')
           this.updateHeight()
           clearInterval(this.intervalID)
+          // TODO: keep video and audio progress when resetting
           // clear previous elements
           this.webtorrentTargetElements.forEach(({renderTarget, appendTarget, figureTarget}) => {
             renderTarget.remove()

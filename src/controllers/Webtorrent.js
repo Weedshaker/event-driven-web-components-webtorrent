@@ -103,12 +103,12 @@ export default class Webtorrent extends WebWorker() {
     const torrentMap =  new Map()
     this.webtorrentAddEventListener = async event => {
       // figure out the infoHash
-      let infoHash = event.detail.torrentId
+      let infoHash = event.detail.torrentId.toLowerCase()
       if (typeof event.detail.torrentId === 'string') {
         try {
           const torrentIdUrl = new URL(event.detail.torrentId)
           let xt
-          if ((xt = torrentIdUrl.searchParams.get('xt'))) infoHash = xt.replace('urn:btih:', '')
+          if ((xt = torrentIdUrl.searchParams.get('xt'))) infoHash = xt.replace('urn:btih:', '').toLowerCase()
         } catch (error) {}
       }
       // handle existing torrent
@@ -132,7 +132,7 @@ export default class Webtorrent extends WebWorker() {
       const result = {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise}
       torrentMapResolve(result)
       // save to storage
-      torrent.on('metadata', () => this.webWorker(Webtorrent.saveTorrentFile, torrent.infoHash, torrent.torrentFile, location.href, event.detail.uid, event.detail.room))
+      torrent.on('metadata', () => this.webWorker(Webtorrent.saveTorrentFile, torrent.infoHash.toLowerCase(), torrent.torrentFile, location.href, event.detail.uid, event.detail.room))
       torrent.on('error', error => console.warn('Webtorrent torrent error:', error))
       this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, result, result.torrent)
     }
@@ -140,9 +140,9 @@ export default class Webtorrent extends WebWorker() {
     this.webtorrentSeedEventListener = async event => {
       let addOpts
       let torrent = this.client.seed(event.detail.input, Object.assign(event.detail.opts || {}, (addOpts = await this.addOpts)))
-      torrent.on('infoHash', () => torrentMap.set(torrent.infoHash, Promise.resolve({torrent, streamToServerReadyPromise: this.streamToServerReadyPromise})))
+      torrent.on('infoHash', () => torrentMap.set(torrent.infoHash.toLowerCase(), Promise.resolve({torrent, streamToServerReadyPromise: this.streamToServerReadyPromise})))
       // save to storage
-      torrent.on('metadata', () => this.webWorker(Webtorrent.saveTorrentFile, torrent.infoHash, torrent.torrentFile, location.href, event.detail.uid, event.detail.room, true))
+      torrent.on('metadata', () => this.webWorker(Webtorrent.saveTorrentFile, torrent.infoHash.toLowerCase(), torrent.torrentFile, location.href, event.detail.uid, event.detail.room, true))
       torrent.on('error', error => console.warn('Webtorrent torrent error:', error))
       // no event like warning or error is fired from webtorrent as well as destroy has no event
       const checkTorrentDestroyedIntervalId = setInterval(async () => {
@@ -152,15 +152,15 @@ export default class Webtorrent extends WebWorker() {
           const existingTorrent = this.client.torrents.find(torrent => Array.from(event.detail.input).find(file => file.name === torrent.name))
           if (existingTorrent) {
             if (existingTorrent.done) {
-              this.webWorker(Webtorrent.saveTorrentFile, existingTorrent.infoHash, existingTorrent.torrentFile, location.href, event.detail.uid, event.detail.room, true)
+              this.webWorker(Webtorrent.saveTorrentFile, existingTorrent.infoHash.toLowerCase(), existingTorrent.torrentFile, location.href, event.detail.uid, event.detail.room, true)
               return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {torrent: existingTorrent, streamToServerReadyPromise: this.streamToServerReadyPromise}, existingTorrent)
             } else {
               await Webtorrent.destroyTorrent(existingTorrent)
-              torrentMap.delete(existingTorrent.infoHash)
+              torrentMap.delete(existingTorrent.infoHash.toLowerCase())
               torrent = this.client.seed(event.detail.input, Object.assign(event.detail.opts || {}, addOpts))
-              torrent.on('infoHash', () => torrentMap.set(torrent.infoHash, Promise.resolve({torrent, streamToServerReadyPromise: this.streamToServerReadyPromise})))
+              torrent.on('infoHash', () => torrentMap.set(torrent.infoHash.toLowerCase(), Promise.resolve({torrent, streamToServerReadyPromise: this.streamToServerReadyPromise})))
               // save to storage
-              torrent.on('metadata', () => this.webWorker(Webtorrent.saveTorrentFile, torrent.infoHash, torrent.torrentFile, location.href, event.detail.uid, event.detail.room, true))
+              torrent.on('metadata', () => this.webWorker(Webtorrent.saveTorrentFile, torrent.infoHash.toLowerCase(), torrent.torrentFile, location.href, event.detail.uid, event.detail.room, true))
               torrent.on('error', error => console.warn('Webtorrent torrent error:', error))
               return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise}, torrent)
             }
