@@ -104,6 +104,8 @@ export default class Webtorrent extends Intersection() {
     console.log('*****errorCounter****', errorCounter, errorCounter > 4 ? {destroyStore: true} : errorCounter > 2 ? {destroyStore: false} : false)
     return new Promise(resolve => this.dispatchEvent(new CustomEvent('webtorrent-add', {
       detail: {
+        uid: this.getAttribute('uid'),
+        room: this.getAttribute('room'),
         torrentId: this.getAttribute('torrent-id') || encodeURI(Array.from((new URL(location.href)).searchParams).reduce((acc, curr) => curr[0] === 'torrent-id'
           ? `${curr[1]}`
           : `${acc}&${curr[0]}=${curr[1]}`, '')),
@@ -153,7 +155,6 @@ export default class Webtorrent extends Intersection() {
   }
 
   connectedCallback() {
-    // TODO: message connect don't destroy webtorrent view but safe it away.
     super.connectedCallback()
     this.hidden = true
     const showPromises = []
