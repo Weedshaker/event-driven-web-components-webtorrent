@@ -222,6 +222,7 @@ export default class Webtorrent extends Intersection() {
    */
   renderCSS () {
     this.css = /* css */`
+      /* TODO: test embed and other tags with and without slot, plus ios */
       ::slotted(video), ::slotted(img), :where(video, img) {
         height: auto;
       }
