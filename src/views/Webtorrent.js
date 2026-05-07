@@ -62,20 +62,14 @@ export default class Webtorrent extends Intersection() {
       if (!this.hasAttribute('updating')) this.updateHeight()
     }
 
-    let resetCounter = 0
     this.resetLinkEventListener = event => {
       event.preventDefault()
       event.stopPropagation()
-      if (resetCounter % 2 === 0) {
-        this.renderTorrent(true, false, true)
-      } else {
-        this.dispatchEvent(new CustomEvent('webtorrent-reset', {
-          bubbles: true,
-          cancelable: true,
-          composed: true
-        }))
-      }
-      resetCounter++
+      this.dispatchEvent(new CustomEvent('webtorrent-reset', {
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      }))
     }
 
     // this updates the min-height on resize, see updateHeight function for more info
