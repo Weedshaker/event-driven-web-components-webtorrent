@@ -62,17 +62,27 @@ export default class Webtorrent extends Intersection() {
       if (!this.hasAttribute('updating')) this.updateHeight()
     }
 
+    let resetCounter = 0
     this.resetLinkEventListener = event => {
       event.preventDefault()
       event.stopPropagation()
-      this.renderTorrent(true)
+      if (resetCounter % 2 === 0) {
+        this.renderTorrent(true, false, true)
+      } else {
+        this.dispatchEvent(new CustomEvent('webtorrent-reset', {
+          bubbles: true,
+          cancelable: true,
+          composed: true
+        }))
+      }
+      resetCounter++
     }
 
     // this updates the min-height on resize, see updateHeight function for more info
     let resizeTimeout = null
     this.resizeEventListener = event => {
       clearTimeout(resizeTimeout)
-      resizeTimeout = setTimeout(async () => this.updateHeight(), 200)
+      resizeTimeout = setTimeout(() => this.updateHeight(), 200)
     }
   }
 
@@ -309,8 +319,8 @@ export default class Webtorrent extends Intersection() {
         clearTimeout(streamDoneTimeoutId)
         streamDoneTimeoutId = setTimeout(() => {
           this.updateHeight()
-          this.details.addEventListener('toggle', this.detailsToggleEventListener)
           this.removeAttribute('updating')
+          this.details.addEventListener('toggle', this.detailsToggleEventListener)
         }, 200)
       }
       const renderFiles = () => {
@@ -323,9 +333,11 @@ export default class Webtorrent extends Intersection() {
         this.webtorrentTargetElements.forEach(({renderTarget}) => {
           renderTarget.addEventListener('load', event => {
             this.updateHeight()
+            this.removeAttribute('updating')
             if (keepScroll) this.dispatchEvent(new CustomEvent('webtorrent-load', {
               detail: {
-                origEvent: event
+                origEvent: event,
+                resetTorrent
               },
               bubbles: true,
               cancelable: true,

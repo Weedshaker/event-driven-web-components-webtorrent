@@ -25,7 +25,6 @@ import { WebWorker } from '../event-driven-web-components-prototypes/src/WebWork
  * }} WEBTORRENT_ADD_SEED_RESULT
  */
 
-// todo: test if client destroy / init solves hangers in reconnecting, else solved by reload
 /**
  * https://webtorrent.io/docs
  * hint: clear OPFS "await (await navigator.storage.getDirectory()).remove({ recursive: true })"
@@ -117,8 +116,7 @@ export default class Webtorrent extends WebWorker() {
     // set attribute namespace
     this.namespace = this.getAttribute('namespace') || 'webtorrent-'
     // init is going to fill this Promise
-    this.clientPromiseResolve = client => client
-    this.clientPromise = new Promise(resolve => (this.clientPromiseResolve = resolve))
+    this.setClientPromise()
     const destroyStoreOnDestroy = false
     const alwaysChokeSeeders = false
     // trackers
@@ -260,9 +258,23 @@ export default class Webtorrent extends WebWorker() {
       }, 200)
       this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise}, torrent, () => clearInterval(checkTorrentDestroyedIntervalId))
     }
+
+    let resetClientTimeout = null
+    this.resetClientEventListener = event => {
+      clearTimeout(resetClientTimeout)
+      resetClientTimeout = setTimeout(() => {
+        this.destroy()
+        this.init()
+      }, 200)
+    }
+
+    this.onlineEventListener = event => this.resetClientEventListener(event)
   }
 
   async init () {
+    if (this.clientDestroyedPromise) await this.clientDestroyedPromise
+    // @ts-ignore
+    if (this.clientPromise.done) return
     /** @type {WebTorrentConstructor|any} */
     const client = new WebTorrentConstructor({
       tracker: {
@@ -279,8 +291,10 @@ export default class Webtorrent extends WebWorker() {
         }
       }
     })
+    // @ts-ignore
     this.clientPromiseResolve(client)
-    this.clientPromise = new Promise(resolve => (this.clientPromiseResolve = resolve))
+    this.setClientPromise()
+    // @ts-ignore
     this.clientPromiseResolve(client)
     client.on('error', error => console.warn('Webtorrent client error:', error))
     // service worker stream server
@@ -307,30 +321,45 @@ export default class Webtorrent extends WebWorker() {
     }
   }
 
-  destroy () {
+  async destroy () {
+    if (this.clientDestroyedPromise) await this.clientDestroyedPromise
     let clientDestroyedResolve = err => err
     /** @type {any} */
-    const clientDestroyedPromise = new Promise(resolve => (clientDestroyedResolve = resolve))
-    this.clientPromise.then(client => client.destroy(error => {
+    this.clientDestroyedPromise = new Promise(resolve => (clientDestroyedResolve = resolve))
+    // @ts-ignore
+    if (!this.clientPromise.done) {
+      clientDestroyedResolve(null)
+      return this.clientDestroyedPromise
+    }
+    const client = await this.clientPromise
+    if (client.destroyed) {
+      clientDestroyedResolve(null)
+      return this.clientDestroyedPromise
+    }
+    client.destroy(error => {
       Webtorrent.#torrentMap.clear()
       // init is going to fill this Promise
-      this.clientPromiseResolve = client => client
-      this.clientPromise = new Promise(resolve => (this.clientPromiseResolve = resolve))
+      this.setClientPromise()
       clientDestroyedResolve(error)
-    }))
-    return clientDestroyedPromise
+      this.clientDestroyedPromise = null
+    })
+    return this.clientDestroyedPromise
   }
 
   connectedCallback () {
     this.init()
     this.addEventListener(`${this.namespace}add`, this.webtorrentAddEventListener)
     this.addEventListener(`${this.namespace}seed`, this.webtorrentSeedEventListener)
+    this.addEventListener(`${this.namespace}reset`, this.resetClientEventListener)
+    self.addEventListener('online', this.onlineEventListener)
   }
 
   disconnectedCallback () {
     this.destroy()
     this.removeEventListener(`${this.namespace}add`, this.webtorrentAddEventListener)
     this.removeEventListener(`${this.namespace}seed`, this.webtorrentSeedEventListener)
+    this.removeEventListener(`${this.namespace}reset`, this.resetClientEventListener)
+    self.removeEventListener('online', this.onlineEventListener)
   }
 
   /**
@@ -366,6 +395,16 @@ export default class Webtorrent extends WebWorker() {
     }
     if (torrent.infoHash) return respond()
     return torrent.on('infoHash', respond)
+  }
+
+  setClientPromise () {
+    // init is going to fill this Promise
+    this.clientPromiseResolve = client => client
+    this.clientPromise = new Promise(resolve => (this.clientPromiseResolve = resolve))
+    // @ts-ignore
+    this.clientPromise.done = false
+    // @ts-ignore
+    this.clientPromise.finally(() => (this.clientPromise.done = true))
   }
 
   // NOTE: This function must run in a webworker, otherwise getFileHandle does not have the function: createSyncAccessHandle
