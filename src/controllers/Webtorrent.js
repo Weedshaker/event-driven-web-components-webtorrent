@@ -262,10 +262,11 @@ export default class Webtorrent extends WebWorker() {
     }
   }
 
-  init () {
+  async init () {
     /** @type {WebTorrentConstructor|any} */
     const client = new WebTorrentConstructor({
       tracker: {
+        announce: (await this.addOpts).announce,
         rtcConfig: {
           iceServers: [
             {
