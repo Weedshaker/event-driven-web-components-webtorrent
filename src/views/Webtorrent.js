@@ -89,7 +89,7 @@ export default class Webtorrent extends Intersection() {
   }
 
   connectedCallbackOnce () {
-    this.renderTorrent()
+    this.renderTorrent(false, false, true)
     // @ts-ignore
     this.connectedCallbackOnce = () => {}
   }
@@ -240,7 +240,7 @@ export default class Webtorrent extends Intersection() {
    * @param {boolean} [forceRenderToLink=false]
    * @returns {Promise<void>}
    */
-  renderTorrent (resetTorrent = false, forceRenderToLink = false) {
+  renderTorrent (resetTorrent = false, forceRenderToLink = false, keepScroll = false) {
     // reset previous render
     if (resetTorrent || forceRenderToLink) this.updateHeight()
     this.setAttribute('updating', '')
@@ -323,7 +323,7 @@ export default class Webtorrent extends Intersection() {
         this.webtorrentTargetElements.forEach(({renderTarget}) => {
           renderTarget.addEventListener('load', event => {
             this.updateHeight()
-            this.dispatchEvent(new CustomEvent('webtorrent-load', {
+            if (keepScroll) this.dispatchEvent(new CustomEvent('webtorrent-load', {
               detail: {
                 origEvent: event
               },
