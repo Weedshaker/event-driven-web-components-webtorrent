@@ -116,6 +116,9 @@ export default class Webtorrent extends WebWorker() {
     this.importMetaUrl = import.meta.url.replace(/(.*\/)(.*)$/, '$1')
     // set attribute namespace
     this.namespace = this.getAttribute('namespace') || 'webtorrent-'
+    // init is going to fill this Promise
+    this.clientPromiseResolve = client => client
+    this.clientPromise = new Promise(resolve => (this.clientPromiseResolve = resolve))
     const destroyStoreOnDestroy = false
     // trackers
     let presetTrackers = this.hasAttribute('preset-trackers')
@@ -173,6 +176,7 @@ export default class Webtorrent extends WebWorker() {
     // uid string - for metadata at the opfs torrentFile store
     // room string - for metadata at the opfs torrentFile store
     this.webtorrentAddEventListener = async event => {
+      const client = await this.clientPromise
       // figure out the infoHash
       let infoHash = event.detail.torrentId
       if (typeof event.detail.torrentId === 'string') {
@@ -188,7 +192,7 @@ export default class Webtorrent extends WebWorker() {
         const existingResult = await Webtorrent.#torrentMap.get(infoHash)
         if (existingResult) {
           if (event.detail.destroyOpts) {
-            await this.destroyTorrent(existingResult.torrent, event.detail.destroyOpts, infoHash) // If opts.destroyStore is specified, it will override opts.destroyStoreOnDestroy passed when the torrent was added.
+            await Webtorrent.destroyTorrent(existingResult.torrent, infoHash, event.detail.destroyOpts) // If opts.destroyStore is specified, it will override opts.destroyStoreOnDestroy passed when the torrent was added.
           } else {
             return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, existingResult, existingResult.torrent)
           }
@@ -201,7 +205,7 @@ export default class Webtorrent extends WebWorker() {
       /** @type {WEBTORRENT_CONTAINER} */
       const torrentContainer = await this.webWorker(Webtorrent.loadTorrentFile, infoHash)
       if (torrentContainer?.torrentFile) torrentId = new Uint8Array(torrentContainer.torrentFile)
-      const torrent = this.client.add(torrentId, Object.assign(event.detail.opts || {}, await this.addOpts))
+      const torrent = client.add(torrentId, Object.assign(event.detail.opts || {}, await this.addOpts))
       /** @type {WEBTORRENT_ADD_SEED_RESULT} */
       const result = {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise}
       torrentMapResolve(result)
@@ -220,11 +224,12 @@ export default class Webtorrent extends WebWorker() {
     // uid string - for metadata at the opfs torrentFile store
     // room string - for metadata at the opfs torrentFile store
     this.webtorrentSeedEventListener = async event => {
+      const client = await this.clientPromise
       let addOpts
       // when the first file in the file list is a torrent file, load the torrent file
       let torrent = Array.from(event.detail.input)[0]?.type === 'application/x-bittorrent'
-        ? this.client.add(Array.from(event.detail.input)[0], Object.assign(event.detail.opts || {}, await this.addOpts))
-        : this.client.seed(event.detail.input, Object.assign(event.detail.opts || {}, (addOpts = await this.addOpts)))
+        ? client.add(Array.from(event.detail.input)[0], Object.assign(event.detail.opts || {}, await this.addOpts))
+        : client.seed(event.detail.input, Object.assign(event.detail.opts || {}, (addOpts = await this.addOpts)))
       torrent.on('infoHash', () => Webtorrent.#torrentMap.set(torrent.infoHash.toLowerCase(), Promise.resolve({torrent, streamToServerReadyPromise: this.streamToServerReadyPromise})))
       // save to storage
       torrent.on('metadata', () => this.webWorker(Webtorrent.saveTorrentFile, torrent.infoHash.toLowerCase(), torrent.torrentFile, location.href, event.detail.uid, event.detail.room, true))
@@ -234,14 +239,14 @@ export default class Webtorrent extends WebWorker() {
         // to detect that this torrent already exists, is by looking for the destroyed property or else the infoHash would have to be precalculated
         if (torrent.destroyed) {
           clearInterval(checkTorrentDestroyedIntervalId)
-          const existingTorrent = this.client.torrents.find(torrent => Array.from(event.detail.input).find(file => file.name === torrent.name))
+          const existingTorrent = client.torrents.find(torrent => Array.from(event.detail.input).find(file => file.name === torrent.name))
           if (existingTorrent) {
             if (existingTorrent.done) {
               this.webWorker(Webtorrent.saveTorrentFile, existingTorrent.infoHash.toLowerCase(), existingTorrent.torrentFile, location.href, event.detail.uid, event.detail.room, true)
               return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {torrent: existingTorrent, streamToServerReadyPromise: this.streamToServerReadyPromise}, existingTorrent)
             } else {
-              await this.destroyTorrent(existingTorrent, undefined, existingTorrent.infoHash.toLowerCase())
-              torrent = this.client.seed(event.detail.input, Object.assign(event.detail.opts || {}, addOpts))
+              await Webtorrent.destroyTorrent(existingTorrent, existingTorrent.infoHash.toLowerCase())
+              torrent = client.seed(event.detail.input, Object.assign(event.detail.opts || {}, addOpts))
               torrent.on('infoHash', () => Webtorrent.#torrentMap.set(torrent.infoHash.toLowerCase(), Promise.resolve({torrent, streamToServerReadyPromise: this.streamToServerReadyPromise})))
               // save to storage
               torrent.on('metadata', () => this.webWorker(Webtorrent.saveTorrentFile, torrent.infoHash.toLowerCase(), torrent.torrentFile, location.href, event.detail.uid, event.detail.room, true))
@@ -257,8 +262,11 @@ export default class Webtorrent extends WebWorker() {
 
   init () {
     /** @type {WebTorrentConstructor|any} */
-    this.client = new WebTorrentConstructor()
-    this.client.on('error', error => console.warn('Webtorrent client error:', error))
+    const client = new WebTorrentConstructor()
+    this.clientPromiseResolve(client)
+    this.clientPromise = new Promise(resolve => (this.clientPromiseResolve = resolve))
+    this.clientPromiseResolve(client)
+    client.on('error', error => console.warn('Webtorrent client error:', error))
     // service worker stream server
     let isStreamToServerReadyResolve = controller => controller
     /** @type {any} */
@@ -270,7 +278,7 @@ export default class Webtorrent extends WebWorker() {
       navigator.serviceWorker.ready.then(controller => {
         const createServer = () => {
           if (controller.active?.state === 'activated') {
-            this.client.createServer({ controller })
+            client.createServer({ controller })
             isStreamToServerReadyResolve(controller)
           } else {
             controller.active?.addEventListener('statechange', event => createServer(), {once: true})
@@ -284,11 +292,16 @@ export default class Webtorrent extends WebWorker() {
   }
 
   destroy () {
-    Webtorrent.#torrentMap.clear()
     let clientDestroyedResolve = err => err
     /** @type {any} */
     const clientDestroyedPromise = new Promise(resolve => (clientDestroyedResolve = resolve))
-    this.client.destroy(error => clientDestroyedResolve(error))
+    this.clientPromise.then(client => client.destroy(error => {
+      Webtorrent.#torrentMap.clear()
+      // init is going to fill this Promise
+      this.clientPromiseResolve = client => client
+      this.clientPromise = new Promise(resolve => (this.clientPromiseResolve = resolve))
+      clientDestroyedResolve(error)
+    }))
     return clientDestroyedPromise
   }
 
@@ -391,7 +404,7 @@ export default class Webtorrent extends WebWorker() {
     }
   }
 
-  static destroyTorrent (torrent, opts, infoHash) {
+  static destroyTorrent (torrent, infoHash, opts = {}) {
     let torrentDestroyedResolve = torrent => torrent
     /** @type {any} */
     const torrentDestroyedPromise = new Promise(resolve => (torrentDestroyedResolve = resolve))
