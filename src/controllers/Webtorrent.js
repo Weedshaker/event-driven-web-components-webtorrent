@@ -264,7 +264,20 @@ export default class Webtorrent extends WebWorker() {
 
   init () {
     /** @type {WebTorrentConstructor|any} */
-    const client = new WebTorrentConstructor()
+    const client = new WebTorrentConstructor({
+      tracker: {
+        rtcConfig: {
+          iceServers: [
+            {
+              urls: [
+                'stun:stun.l.google.com:19302',
+                'stun:global.stun.twilio.com:3478'
+              ]
+            }
+          ]
+        }
+      }
+    })
     this.clientPromiseResolve(client)
     this.clientPromise = new Promise(resolve => (this.clientPromiseResolve = resolve))
     this.clientPromiseResolve(client)
