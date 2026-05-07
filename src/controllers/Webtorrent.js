@@ -120,6 +120,7 @@ export default class Webtorrent extends WebWorker() {
     this.clientPromiseResolve = client => client
     this.clientPromise = new Promise(resolve => (this.clientPromiseResolve = resolve))
     const destroyStoreOnDestroy = false
+    const alwaysChokeSeeders = false
     // trackers
     let presetTrackers = this.hasAttribute('preset-trackers')
       ? [
@@ -160,10 +161,11 @@ export default class Webtorrent extends WebWorker() {
           ...presetTrackers,
           ...trackers
         ])),
-        destroyStoreOnDestroy
-      })).catch(error => ({announce: presetTrackers, destroyStoreOnDestroy}))
+        destroyStoreOnDestroy,
+        alwaysChokeSeeders
+      })).catch(error => ({announce: presetTrackers, destroyStoreOnDestroy, alwaysChokeSeeders}))
     } else {
-      this.addOpts = Promise.resolve({announce: presetTrackers, destroyStoreOnDestroy})
+      this.addOpts = Promise.resolve({announce: presetTrackers, destroyStoreOnDestroy, alwaysChokeSeeders})
     }
     
     // expects the following event.detail:
