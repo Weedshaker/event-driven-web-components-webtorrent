@@ -280,11 +280,7 @@ export default class Webtorrent extends WebWorker() {
     // @ts-ignore
     if (this.clientPromise.done) return
     /** @type {WebTorrentConstructor|any} */
-    const client = new WebTorrentConstructor({
-      tracker: {
-        announce: (await this.addOpts).announce
-      }
-    })
+    const client = new WebTorrentConstructor()
     // @ts-ignore
     this.clientPromiseResolve(client)
     this.setClientPromise()
