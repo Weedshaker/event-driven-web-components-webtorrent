@@ -128,7 +128,7 @@ export default class Webtorrent extends WebWorker() {
     // init is going to fill this Promise
     this.setClientPromise()
     const destroyStoreOnDestroy = false
-    const alwaysChokeSeeders = false
+    const alwaysChokeSeeders = true
     // trackers
     let presetTrackers = this.hasAttribute('preset-trackers')
       ? [
