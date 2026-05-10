@@ -65,11 +65,7 @@ export default class Webtorrent extends Intersection() {
     this.resetLinkEventListener = event => {
       event.preventDefault()
       event.stopPropagation()
-      this.dispatchEvent(new CustomEvent('webtorrent-reset', {
-        bubbles: true,
-        cancelable: true,
-        composed: true
-      }))
+      this.torrentErrorEventListener(event)
     }
 
     // this updates the min-height on resize, see updateHeight function for more info
@@ -287,6 +283,7 @@ export default class Webtorrent extends Intersection() {
       let videosPlaying = []
       this.fileNameEl.textContent = torrent.name
       this.doOnIntersection = () => {
+        if (!this.hasAttribute('no-video-auto-pause')) videosPlaying.forEach(video => video.play())
         // destroy has no event on webTorrent, thats why interval
         const intervalFunc = () => {
           if (torrent.destroyed) {
@@ -296,7 +293,6 @@ export default class Webtorrent extends Intersection() {
           if (torrent.metadata) progressElement.setAttribute('value', 100 * torrent.progress)
           this.progressText.textContent = `${(100 * torrent.progress).toFixed(1)}%`
           this.peersEl.innerText = `${torrent.numPeers} peer${torrent.numPeers === 1 ? '' : 's'}`
-          if (!this.hasAttribute('no-video-auto-pause')) videosPlaying.forEach(video => video.play())
         }
         intervalFunc()
         clearInterval(this.intervalID)
