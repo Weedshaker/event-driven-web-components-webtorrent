@@ -18,8 +18,12 @@ export default class Webtorrent extends Intersection() {
   constructor(options = {}, ...args) {
     super({ importMetaUrl: import.meta.url, tabindex: 'no-tabindex', intersectionObserverInit: {}, ...options }, ...args)
     
+    // set attribute namespace
+    this.namespace = this.getAttribute('namespace') || 'webtorrent-'
+    this.stallTimeout = 60000
     /** @type {{renderTarget, appendTarget, figureTarget, file, tagName}[]} */
     this.webtorrentTargetElements = []
+    this.renderTorrentQueue = []
 
     this.torrentErrorEventListener = event => this.renderTorrent(true)
 
@@ -46,6 +50,8 @@ export default class Webtorrent extends Intersection() {
 
     // Avoid DOM performance issues
     this.updateHeight = () => {
+      let promiseResolve
+      const promise = new Promise(resolve => (promiseResolve = resolve))
       this.removeAttribute('has-height')
       this.customStyleHeight.textContent = ''
       self.requestAnimationFrame(timeStamp => {
@@ -55,7 +61,9 @@ export default class Webtorrent extends Intersection() {
           }
         `
         this.setAttribute('has-height', '')
+        promiseResolve()
       })
+      return promise
     }
 
     this.detailsToggleEventListener = event => {
@@ -240,12 +248,17 @@ export default class Webtorrent extends Intersection() {
    * @param {boolean} [forceRenderToLink=false]
    * @returns {Promise<void>}
    */
-  renderTorrent (resetTorrent = false, forceRenderToLink = false, keepScroll = false) {
-    // reset previous render
-    if (resetTorrent || forceRenderToLink) this.updateHeight()
+  async renderTorrent (resetTorrent = false, forceRenderToLink = false, keepScroll = false) {
     this.setAttribute('updating', '')
     this.details.setAttribute('open', '')
     clearInterval(this.intervalID)
+    const queuePromiseAll = Promise.all(this.renderTorrentQueue)
+    let queueResolve
+    const queuePromise = new Promise(resolve => (queueResolve = resolve))
+    this.renderTorrentQueue.push(queuePromise)
+    await queuePromiseAll
+    // reset previous render
+    if (resetTorrent || forceRenderToLink) await this.updateHeight()
     // clear previous torrent media elements
     this.webtorrentTargetElements.forEach(({renderTarget, appendTarget, figureTarget}) => {
       renderTarget.remove()
@@ -262,7 +275,7 @@ export default class Webtorrent extends Intersection() {
     progressTarget.setAttribute('max', '100')
     this.progressBar.appendChild(progressTarget)
     // get torrent
-    return new Promise(resolve => this.dispatchEvent(new CustomEvent('webtorrent-add', {
+    return new Promise(resolve => this.dispatchEvent(new CustomEvent(`${this.namespace}add`, {
       detail: {
         uid: this.getAttribute('uid'),
         room: this.getAttribute('room'),
@@ -280,6 +293,11 @@ export default class Webtorrent extends Intersection() {
       const doneFunc = () => this.details.removeAttribute('open')
       if (torrent.done) doneFunc()
       torrent.on('done', doneFunc)
+      let lastActivity = Date.now()
+      const activityFunc = () => (lastActivity = Date.now())
+      torrent.on('download', activityFunc)
+      torrent.on('upload', activityFunc)
+      torrent.on('wire', activityFunc)
       let videosPlaying = []
       this.fileNameEl.textContent = torrent.name
       this.doOnIntersection = () => {
@@ -289,6 +307,18 @@ export default class Webtorrent extends Intersection() {
           if (torrent.destroyed) {
             clearInterval(this.intervalID)
             return this.renderTorrent()
+          }
+          // is torrent stalled
+          if ((lastActivity + this.stallTimeout) < Date.now() && torrent.numPeers > 0 && !torrent.downloadSpeed && !torrent.uploadSpeed) {
+            this.dispatchEvent(new CustomEvent(`${this.namespace}is-stalled`, {
+              detail: {
+                torrent
+              },
+              bubbles: true,
+              cancelable: true,
+              composed: true
+            }))
+            return this.renderTorrent(true)
           }
           if (torrent.metadata) progressElement.setAttribute('value', 100 * torrent.progress)
           this.progressText.textContent = `${(100 * torrent.progress).toFixed(1)}%`
@@ -324,7 +354,7 @@ export default class Webtorrent extends Intersection() {
           renderTarget.addEventListener('load', event => {
             this.updateHeight()
             this.removeAttribute('updating')
-            if (keepScroll) this.dispatchEvent(new CustomEvent('webtorrent-load', {
+            if (keepScroll) this.dispatchEvent(new CustomEvent(`${this.namespace}load`, {
               detail: {
                 origEvent: event,
                 resetTorrent
@@ -342,6 +372,8 @@ export default class Webtorrent extends Intersection() {
       } else {
         torrent.on('ready', renderFiles)
       }
+      queueResolve()
+      this.renderTorrentQueue.splice(this.renderTorrentQueue.indexOf(queuePromise), 1)
     })
   }
 
