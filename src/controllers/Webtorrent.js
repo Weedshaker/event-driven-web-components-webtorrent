@@ -129,7 +129,6 @@ export default class Webtorrent extends WebWorker() {
     // init is going to fill this Promise
     this.setClientPromise()
     const destroyStoreOnDestroy = false
-    const alwaysChokeSeeders = true
     // trackers
     let presetTrackers = this.hasAttribute('preset-trackers')
       ? [
@@ -170,11 +169,10 @@ export default class Webtorrent extends WebWorker() {
           ...presetTrackers,
           ...trackers
         ])),
-        destroyStoreOnDestroy,
-        alwaysChokeSeeders
-      })).catch(error => ({announce: presetTrackers, destroyStoreOnDestroy, alwaysChokeSeeders}))
+        destroyStoreOnDestroy
+      })).catch(error => ({announce: presetTrackers, destroyStoreOnDestroy}))
     } else {
-      this.addOpts = Promise.resolve({announce: presetTrackers, destroyStoreOnDestroy, alwaysChokeSeeders})
+      this.addOpts = Promise.resolve({announce: presetTrackers, destroyStoreOnDestroy})
     }
     
     // expects the following event.detail:
@@ -196,6 +194,16 @@ export default class Webtorrent extends WebWorker() {
           const torrentIdUrl = new URL(event.detail.torrentId)
           let xt
           if ((xt = torrentIdUrl.searchParams.get('xt'))) infoHash = xt.replace('urn:btih:', '').toLowerCase()
+          // inform ipfs about this cid
+          let cid
+          if ((cid = torrentIdUrl.searchParams.get('cid'))) this.dispatchEvent(new CustomEvent('ipfs-add', {
+            detail: {
+              cid
+            },
+            bubbles: true,
+            cancelable: true,
+            composed: true
+          }))
         } catch (error) {}
       }
       // handle existing torrent
@@ -359,19 +367,19 @@ export default class Webtorrent extends WebWorker() {
 
   connectedCallback () {
     this.init()
-    this.addEventListener(`${this.namespace}add`, this.webtorrentAddEventListener)
-    this.addEventListener(`${this.namespace}seed`, this.webtorrentSeedEventListener)
-    this.addEventListener(`${this.namespace}reset`, this.webtorrentResetEventListener)
-    this.addEventListener(`${this.namespace}is-stalled`, this.webtorrentIsStalledEventListener)
+    document.body.addEventListener(`${this.namespace}add`, this.webtorrentAddEventListener)
+    document.body.addEventListener(`${this.namespace}seed`, this.webtorrentSeedEventListener)
+    document.body.addEventListener(`${this.namespace}reset`, this.webtorrentResetEventListener)
+    document.body.addEventListener(`${this.namespace}is-stalled`, this.webtorrentIsStalledEventListener)
     self.addEventListener('online', this.onlineEventListener)
   }
 
   disconnectedCallback () {
     this.destroy()
-    this.removeEventListener(`${this.namespace}add`, this.webtorrentAddEventListener)
-    this.removeEventListener(`${this.namespace}seed`, this.webtorrentSeedEventListener)
-    this.removeEventListener(`${this.namespace}reset`, this.webtorrentResetEventListener)
-    this.removeEventListener(`${this.namespace}is-stalled`, this.webtorrentIsStalledEventListener)
+    document.body.removeEventListener(`${this.namespace}add`, this.webtorrentAddEventListener)
+    document.body.removeEventListener(`${this.namespace}seed`, this.webtorrentSeedEventListener)
+    document.body.removeEventListener(`${this.namespace}reset`, this.webtorrentResetEventListener)
+    document.body.removeEventListener(`${this.namespace}is-stalled`, this.webtorrentIsStalledEventListener)
     self.removeEventListener('online', this.onlineEventListener)
   }
 
