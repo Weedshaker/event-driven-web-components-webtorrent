@@ -61,7 +61,35 @@ export default class Ipfs extends HTMLElement {
       const client = await this.clientPromise
       const decoder = new TextDecoder()
       let text = ''
-      // TODO: cache here, not to cat twice
+      // TODO: Error handling
+      /*
+      for await (const chunk of client.cat(cid, {
+        timeout: 10000
+      })) {
+        ...
+      }
+      */
+      // ----------------
+      // TODO: use abort controller array per client and clear all when client gets connected to an other ipfs service provider
+      /*
+      const controller = new AbortController()
+
+      try {
+        for await (const chunk of client.cat(cid, {
+          signal: controller.signal
+        })) {
+          text += decoder.decode(chunk, { stream: true })
+        }
+
+        text += decoder.decode()
+      } catch (err) {
+        if (controller.signal.aborted) {
+          console.log('Download cancelled')
+        } else {
+          console.error(err)
+        }
+      }
+      */
       for await (const chunk of client.cat(event.detail.cid)) {
         text += decoder.decode(chunk, { stream: true })
       }

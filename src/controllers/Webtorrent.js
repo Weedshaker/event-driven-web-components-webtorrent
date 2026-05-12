@@ -195,6 +195,7 @@ export default class Webtorrent extends WebWorker() {
           const torrentIdUrl = new URL(event.detail.torrentId)
           let xt
           if ((xt = torrentIdUrl.searchParams.get('xt'))) infoHash = xt.replace('urn:btih:', '').toLowerCase()
+          // TODO: may delay this, in case the torrent loads quickly form OPFS or network
           // inform ipfs about this cid
           let cid
           if ((cid = torrentIdUrl.searchParams.get('cid'))) this.dispatchEvent(new CustomEvent('ipfs-add', {
@@ -231,6 +232,7 @@ export default class Webtorrent extends WebWorker() {
       torrentMapResolve(result)
       // save to storage
       this.onMetadata(torrent, event.detail.uid, event.detail.room)
+      // TODO: on('done', this.dispatchEvent(new CustomEvent('ipfs-seed') ... IMPORTANT: only do this once, ether check at ipfs or here
       this.onError(torrent)
       this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, result, result.torrent)
     }
