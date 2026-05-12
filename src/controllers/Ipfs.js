@@ -37,6 +37,8 @@ this.clientPromise.then(async client => {
 
 /**
  * https://github.com/ipfs/js-kubo-rpc-client/tree/main
+ * // TODO: IPFS upload/download progress
+ * // TODO: IPFS service provider choose by ping / https://ipfs.qzz.io/ type health check / ipfs hosted file with providers
  *
  * @export
  * @return {CustomElementConstructor | *}

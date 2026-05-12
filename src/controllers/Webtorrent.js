@@ -111,6 +111,7 @@ export default class Webtorrent extends WebWorker() {
   /**
    * mirrors all saved torrentFileContainers Objects / all active torrents saved when torrent on metadata (torrentFile available) happens
    * so this is a shortcut instead of every time loading the torrentFileContainer from OPFS (not done because of performance but convenience)
+   * // TODO: re-upload file
    * 
    * @readonly
    * @static
