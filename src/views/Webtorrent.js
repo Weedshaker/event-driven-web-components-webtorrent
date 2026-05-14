@@ -145,12 +145,16 @@ export default class Webtorrent extends Intersection() {
    */
   renderCSS () {
     this.css = /* css */`
-      /* TODO: test embed and other tags with and without slot, plus ios */
       ::slotted(video), ::slotted(img), :where(video, img) {
         height: auto;
       }
       ::slotted(video), ::slotted(audio), ::slotted(img), :where(video, audio, img) {
         width: 100%;
+      }
+      ::slotted(embed), ::slotted(iframe), :where(embed, iframe) {
+        height: auto;
+        width: 100%;
+        aspect-ratio: 4/3;
       }
       ::slotted([id=reset]) {
         cursor: pointer;
@@ -436,7 +440,7 @@ export default class Webtorrent extends Intersection() {
       a.setAttribute('download', file.name)
       a.textContent = file.name
       renderTarget.prepend(a)
-      if (streamToServerReadyPromise.done) {
+      if (streamToServerReadyPromise.done && tagName !== 'embed' && tagName !== 'iframe') {
         file.streamTo(renderTarget)
       } else {
         file.blob().then(blob => renderTarget.setAttribute(targetAttribute || 'src', URL.createObjectURL(blob)))

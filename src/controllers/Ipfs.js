@@ -4,40 +4,8 @@ import '../ipfs/index.min.js'
 /* global Environment */
 /* global KuboRpcClient */
 
-/*
-const stream = new ReadableStream({
-  async start(controller) {
-    for await (const chunk of ipfs.cat(cid)) {
-      controller.enqueue(chunk)
-    }
-
-    controller.close()
-  }
-})
-
-const response = new Response(stream)
-const blob = await response.blob()
-
-video.src = URL.createObjectURL(blob)
-
----
-
-// @ts-ignore
-this.clientPromise.then(async client => {
-  console.log(client.add('Hello Files! Yooooooh'))
-  const decoder = new TextDecoder()
-  let data = ''
-  for await (const chunk of client.cat("QmRohXmcFYoxA45AdWyDjDMcDA3u1reqATHDjVpU6W6s3r")) {
-    data += decoder.decode(chunk, { stream: true })
-  }
-  console.log(data)
-})
-
-*/
-
 /**
  * https://github.com/ipfs/js-kubo-rpc-client/tree/main
- * // TODO: IPFS upload/download progress
  * // TODO: IPFS service provider choose by ping / https://ipfs.qzz.io/ type health check / ipfs hosted file with providers
  * // TODO: Error handling (CORS)
  *
@@ -53,100 +21,97 @@ export default class Ipfs extends HTMLElement {
     // set attribute namespace
     this.namespace = this.getAttribute('namespace') || 'ipfs-'
     const stallTimeout = 6000 // has to be less than the timeout at view
+    this.clientUrl = 'https://ipfs.oversas.org'
+    this.clientRpcVersion = '/api/v0'
     // init is going to fill this Promise
     this.setClientPromise()
 
-    // client.cat
-    this.ipfsAddEventListener = async event => {
-      const client = await this.clientPromise
-      const decoder = new TextDecoder()
-      let text = ''
-      // TODO: Error handling
-      /*
+    // TODO: Error handling
+    /*
+    for await (const chunk of client.cat(cid, {
+      timeout: 10000
+    })) {
+      ...
+    }
+    */
+    // ----------------
+    // TODO: use abort controller array per client and clear all when client gets connected to an other ipfs service provider
+    /*
+    const controller = new AbortController()
+
+    try {
       for await (const chunk of client.cat(cid, {
-        timeout: 10000
+        signal: controller.signal
       })) {
-        ...
-      }
-      */
-      // ----------------
-      // TODO: use abort controller array per client and clear all when client gets connected to an other ipfs service provider
-      /*
-      const controller = new AbortController()
-
-      try {
-        for await (const chunk of client.cat(cid, {
-          signal: controller.signal
-        })) {
-          text += decoder.decode(chunk, { stream: true })
-        }
-
-        text += decoder.decode()
-      } catch (err) {
-        if (controller.signal.aborted) {
-          console.log('Download cancelled')
-        } else {
-          console.error(err)
-        }
-      }
-      */
-      for await (const chunk of client.cat(event.detail.cid)) {
         text += decoder.decode(chunk, { stream: true })
       }
+
       text += decoder.decode()
-      const fileList = JSON.parse(text)
-      Promise.all(fileList.map(async metadata => {
+    } catch (err) {
+      if (controller.signal.aborted) {
+        console.log('Download cancelled')
+      } else {
+        console.error(err)
+      }
+    }
+    */
+    // client.cat
+    this.ipfsAddEventListener = async event => {
+      const addWebSeedFunc = torrent => {
+        clearTimeout(readyTimeoutId)
+        // https://www.bittorrent.org/beps/bep_0019.html calls a single file .../webtorrent-web-seed/ and multiple .../webtorrent-web-seed/file1/file2
+        // also it delivers a range in the header, which can span multiple files, thats why we pass some torrent file data through the addWebSeed url to the service worker
+        const filesMetadata = encodeURIComponent(JSON.stringify(torrent.files.reduce((acc, file) => {
+          acc.push({name: file.name, offset: file.offset, length: file.length})
+          return acc
+        }, [])))
+        torrent.addWebSeed(`${this.clientUrl}/ipfs/${event.detail.cid}/files-metadata/${filesMetadata}/webtorrent-web-seed/`)
+      }
+      // when torrent does not have torrent file and does not become ready, in that case... after some timeout... we fetch the torrent file from ipfs
+      const readyTimeoutId = setTimeout(async () => {
+        const client = await this.clientPromise
         const chunks = []
-        for await (const chunk of client.cat(metadata.cid)) {
+        for await (const chunk of client.cat(`${event.detail.cid}/torrent`)) {
           chunks.push(chunk)
         }
-        return new File(
+        const torrentFile = new File(
           chunks,
-          metadata.name,
+          'torrent',
           {
-            type: metadata.type,
-            lastModified: metadata.lastModified
+            type: 'application/x-bittorrent'
           }
         )
-      })).then(files => {
-        console.log('*********', 'added from ipfs')
-        this.dispatchEvent(new CustomEvent('webtorrent-seed', {
+        new Promise(resolve => this.dispatchEvent(new CustomEvent('webtorrent-seed', {
           detail: {
             uid: event.detail.uid,
             room: event.detail.room,
-            input: files,
+            input: [torrentFile],
+            resolve
           },
           bubbles: true,
           cancelable: true,
           composed: true
-        }))
+        }))).then(({torrent}) => addWebSeedFunc(torrent))
+      }, 2000)
+      event.detail.torrent.on('ready', () => {
+        clearTimeout(readyTimeoutId)
+        addWebSeedFunc(event.detail.torrent)
       })
     }
 
     // client.addAll
     this.ipfsSeedEventListener = async event => {
       const client = await this.clientPromise
-      const fileListMetaData = []
-      // upload files and collect metadata
-      let counter = 0
-      for await (const result of client.addAll(event.detail.input, {pin: true})) {
-        fileListMetaData.push({
-          cid: result.cid.toString(),
-          lastModified: event.detail.input[counter].lastModified,
-          name: event.detail.input[counter].name,
-          size: event.detail.input[counter].size,
-          type: event.detail.input[counter].type
-        })
-        counter++
+      let directoryResult
+      // todo: error handling try/catch
+      for await (const result of client.addAll(Array.from(event.detail.input).concat([event.detail.torrent.torrentFile]).map(file => ({
+        path: file.name || 'torrent',
+        content: file
+      })), {pin: true, wrapWithDirectory: true})) {
+        directoryResult = result
       }
-      // list all files of the wrapWithDirectory
-      const fileListJson = new File(
-        [JSON.stringify(fileListMetaData)],
-        'fileList.json',
-        { type: 'application/json' }
-      )
-      const rootCid = (await client.add(fileListJson, {pin: true})).cid.toString()
-      this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {cid: rootCid})
+      // creates a directory cid and allows routing by name eg.: https://ipfs.io/ipfs/QmUtvc4sz34X2163vkoPAjRfjRKDPdB7PqwjrvRabaMt8j/3 6 9 Power Tesla.jpg
+      this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {cid: directoryResult.cid.toString()})
     }
   }
 
@@ -155,7 +120,7 @@ export default class Ipfs extends HTMLElement {
     // @ts-ignore
     if (this.clientPromise.done) return
     // @ts-ignore
-    const client = KuboRpcClient.create({url: 'https://ipfs.oversas.org/api/v0'})
+    const client = KuboRpcClient.create({url: `${this.clientUrl}${this.clientRpcVersion}`})
     // @ts-ignore
     this.clientPromiseResolve(client)
     this.setClientPromise()
