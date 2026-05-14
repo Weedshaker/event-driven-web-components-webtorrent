@@ -65,6 +65,7 @@ export default class Ipfs extends HTMLElement {
           acc.push({name: file.name, offset: file.offset, length: file.length})
           return acc
         }, [])))
+        // TODO: add multiple ipfs web seeds
         torrent.addWebSeed(`${this.clientUrl}/ipfs/${event.detail.cid}/files-metadata/${filesMetadata}/webtorrent-web-seed/`)
       }
       // when torrent does not have torrent file and does not become ready, in that case... after some timeout... we fetch the torrent file from ipfs

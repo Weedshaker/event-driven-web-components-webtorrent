@@ -441,6 +441,122 @@ export default class Webtorrent extends Intersection() {
       a.textContent = file.name
       renderTarget.prepend(a)
       if (streamToServerReadyPromise.done && tagName !== 'embed' && tagName !== 'iframe') {
+        // TODO: wormhole-crypto decryptStream() file.streamURL / NOTE: streamTo (elem) {elem.src = this.streamURL...}
+        /*
+        file.on('stream', async ({ stream }, cb) => {
+
+        const reader = stream.getReader()
+
+        // Read first chunk
+        const first = await reader.read()
+
+        if (first.done) {
+          return cb(new Error('Empty stream'))
+        }
+
+        const chunk = first.value
+
+        // Decode small beginning
+        const text = new TextDecoder().decode(
+          chunk.slice(0, 64)
+        )
+
+        // Detect encryption marker
+        if (!text.startsWith('WH01:')) {
+
+          // Not encrypted
+          const passthrough = new ReadableStream({
+            start(controller) {
+              controller.enqueue(chunk)
+
+              async function pump() {
+                while (true) {
+                  const { done, value } =
+                    await reader.read()
+
+                  if (done) break
+
+                  controller.enqueue(value)
+                }
+
+                controller.close()
+              }
+
+              pump()
+            }
+          })
+
+          return cb(null, passthrough)
+        }
+
+        // Parse header
+        const end = text.indexOf(':', 5)
+
+        const keyId = text.slice(5, end)
+
+        console.log('Encrypted stream:', keyId)
+
+        // Find where encrypted payload begins
+        const payloadStart = end + 1
+
+        // Rebuild stream WITHOUT plaintext header
+        const encryptedPayloadStream =
+          new ReadableStream({
+
+            start(controller) {
+
+              // Push remaining bytes from first chunk
+              controller.enqueue(
+                chunk.slice(payloadStart)
+              )
+
+              async function pump() {
+
+                while (true) {
+                  const { done, value } =
+                    await reader.read()
+
+                  if (done) break
+
+                  controller.enqueue(value)
+                }
+
+                controller.close()
+              }
+
+              pump()
+            }
+          })
+
+        // Decrypt stream
+        const decryptedStream =
+          await keychain.decryptStream(
+            encryptedPayloadStream
+          )
+
+        cb(null, decryptedStream)
+      })
+        */
+       /*
+       async function readHeader(stream) {
+      const reader = stream.getReader()
+
+      let buffer = new Uint8Array()
+
+      while (buffer.length < HEADER_SIZE) {
+        const { value, done } = await reader.read()
+        if (done) throw new Error("Unexpected EOF")
+
+        buffer = concat(buffer, value)
+      }
+
+      const header = buffer.slice(0, HEADER_SIZE)
+      const rest = buffer.slice(HEADER_SIZE)
+
+      return { header, rest, reader }
+    }
+      */
+        // or file.on('stream', function ({ stream, file, req }, function pipeCallback) {})
         file.streamTo(renderTarget)
       } else {
         file.blob().then(blob => renderTarget.setAttribute(targetAttribute || 'src', URL.createObjectURL(blob)))
