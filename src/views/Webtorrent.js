@@ -144,6 +144,7 @@ export default class Webtorrent extends Intersection() {
    * @return {Promise<void>}
    */
   renderCSS () {
+    // TODO: fix IOS audio element display
     this.css = /* css */`
       ::slotted(video), ::slotted(img), :where(video, img) {
         height: auto;

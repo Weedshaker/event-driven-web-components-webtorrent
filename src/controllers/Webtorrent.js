@@ -128,7 +128,10 @@ export default class Webtorrent extends WebWorker() {
     const stallTimeout = 6000 // has to be less than the timeout at view
     // init is going to fill this Promise
     this.setClientPromise()
-    const destroyStoreOnDestroy = false
+    const presetAddOpts = {
+      destroyStoreOnDestroy: false,
+      createdBy: 'decentral-ninja'
+    }
     // trackers
     let presetTrackers = this.hasAttribute('preset-trackers')
       ? [
@@ -169,10 +172,10 @@ export default class Webtorrent extends WebWorker() {
           ...presetTrackers,
           ...trackers
         ])),
-        destroyStoreOnDestroy
-      })).catch(error => ({announce: presetTrackers, destroyStoreOnDestroy}))
+        ...presetAddOpts
+      })).catch(error => ({announce: presetTrackers, ...presetAddOpts}))
     } else {
-      this.addOpts = Promise.resolve({announce: presetTrackers, destroyStoreOnDestroy})
+      this.addOpts = Promise.resolve({announce: presetTrackers, ...presetAddOpts})
     }
     
     // expects the following event.detail:
@@ -222,6 +225,7 @@ export default class Webtorrent extends WebWorker() {
       torrentMapResolve(result)
       // save to storage
       this.onReady(torrent, event.detail.uid, event.detail.room)
+      // upload to ipfs || wait until done, on stream did not work so far
       if (cid) torrent.on('done', () => this.dispatchEvent(new CustomEvent('ipfs-seed', {
         detail: {
           torrent,
@@ -258,11 +262,10 @@ export default class Webtorrent extends WebWorker() {
     // room string - for metadata at the opfs torrentFile store
     this.webtorrentSeedEventListener = async event => {
       const client = await this.clientPromise
-      let addOpts
       // when the first file in the file list is a torrent file, load the torrent file
       const addOrSeedFunc = async (input, opts) => Array.from(input)[0]?.type === 'application/x-bittorrent'
         ? client.add(Array.from(input)[0], Object.assign(opts || {}, await this.addOpts))
-        : client.seed(input, Object.assign(opts || {}, (addOpts = await this.addOpts)))
+        : client.seed(input, Object.assign(opts || {}, await this.addOpts))
       let torrent = await addOrSeedFunc(event.detail.input, event.detail.opts)
       this.onInfoHash(torrent)
       // save to storage
@@ -282,7 +285,7 @@ export default class Webtorrent extends WebWorker() {
               return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {torrent: existingTorrent, streamToServerReadyPromise: this.streamToServerReadyPromise}, existingTorrent)
             } else {
               await Webtorrent.destroyTorrent(existingTorrent, existingTorrent.infoHash.toLowerCase())
-              torrent = await addOrSeedFunc(event.detail.input, Object.assign(event.detail.opts || {}, addOpts))
+              torrent = await addOrSeedFunc(event.detail.input, event.detail.opts)
               this.onInfoHash(torrent)
               // save to storage
               this.onReady(torrent, event.detail.uid, event.detail.room, true)
