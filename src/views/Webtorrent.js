@@ -314,7 +314,7 @@ export default class Webtorrent extends Intersection() {
             return this.renderTorrent()
           }
           // is torrent stalled
-          if ((lastActivity + this.stallTimeout) < Date.now() && torrent.numPeers > 0 && !torrent.downloadSpeed && !torrent.uploadSpeed) {
+          if (!torrent.done && (lastActivity + this.stallTimeout) < Date.now() && torrent.numPeers > 0 && !torrent.downloadSpeed && !torrent.uploadSpeed) {
             this.dispatchEvent(new CustomEvent(`${this.namespace}is-stalled`, {
               detail: {
                 torrent
@@ -341,6 +341,7 @@ export default class Webtorrent extends Intersection() {
       const tagName = forceRenderToLink ? 'a' : ''
       let streamDoneTimeoutId
       const streamOrDoneFunc = () => {
+        activityFunc()
         clearTimeout(streamDoneTimeoutId)
         streamDoneTimeoutId = setTimeout(() => {
           this.updateHeight()

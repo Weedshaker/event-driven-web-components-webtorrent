@@ -8,6 +8,7 @@ import { WebWorker } from '../event-driven-web-components-prototypes/src/WebWork
  * @typedef {{
  *  self: boolean,
  *  room: string,
+ *  cid?: string,
  *  torrentFile: never[],
  *  added: {
  *    href: string,
@@ -125,7 +126,7 @@ export default class Webtorrent extends WebWorker() {
     this.importMetaUrl = import.meta.url.replace(/(.*\/)(.*)$/, '$1')
     // set attribute namespace
     this.namespace = this.getAttribute('namespace') || 'webtorrent-'
-    const stallTimeout = 6000 // has to be less than the timeout at view
+    const stallTimeout = 10000 // has to be less than the timeout at view
     // init is going to fill this Promise
     this.setClientPromise()
     const presetAddOpts = {
@@ -213,18 +214,32 @@ export default class Webtorrent extends WebWorker() {
         }
       }
       let torrentMapResolve = result => result
+      // basically the same as onInfoHash
       Webtorrent.#torrentMap.set(infoHash, new Promise(resolve => (torrentMapResolve = resolve)))
       let torrentId = event.detail.torrentId
       // figure out the torrentId, best to get torrentFile from storage to resurrect torrent
       /** @type {WEBTORRENT_CONTAINER} */
       const torrentContainer = await this.webWorker(Webtorrent.loadTorrentFile, infoHash)
-      if (torrentContainer?.torrentFile) torrentId = new Uint8Array(torrentContainer.torrentFile)
+      if (torrentContainer?.torrentFile) {
+        torrentId = new Uint8Array(torrentContainer.torrentFile)
+      } else if (cid) {
+        // try to get the torrent through ipfs
+        torrentId = (await new Promise(resolve => this.dispatchEvent(new CustomEvent('ipfs-get-torrent-file', {
+          detail: {
+            cid,
+            resolve
+          },
+          bubbles: true,
+          cancelable: true,
+          composed: true
+        })))).torrentFile
+      }
       const torrent = client.add(torrentId, Object.assign(event.detail.opts || {}, await this.addOpts))
       /** @type {WEBTORRENT_ADD_SEED_RESULT} */
       const result = {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise}
       torrentMapResolve(result)
       // save to storage
-      this.onReady(torrent, event.detail.uid, event.detail.room)
+      this.onReady(torrent, event.detail.uid, event.detail.room, cid)
       // upload to ipfs || wait until done, on stream did not work so far
       if (cid) torrent.on('done', () => this.dispatchEvent(new CustomEvent('ipfs-seed', {
         detail: {
@@ -240,8 +255,6 @@ export default class Webtorrent extends WebWorker() {
         // inform ipfs about this cid to addWebSeed to the torrent
         if (cid) this.dispatchEvent(new CustomEvent('ipfs-add', {
           detail: {
-            uid: event.detail.uid,
-            room: event.detail.room,
             cid,
             torrent
           },
@@ -269,7 +282,7 @@ export default class Webtorrent extends WebWorker() {
       let torrent = await addOrSeedFunc(event.detail.input, event.detail.opts)
       this.onInfoHash(torrent)
       // save to storage
-      this.onReady(torrent, event.detail.uid, event.detail.room, true)
+      this.onReady(torrent, event.detail.uid, event.detail.room, event.detail.cid, true)
       this.onError(torrent)
       // no event like warning or error is fired from webtorrent as well as destroy has no event
       const checkTorrentDestroyedIntervalId = setInterval(async () => {
@@ -279,16 +292,14 @@ export default class Webtorrent extends WebWorker() {
           const existingTorrent = (torrent.infoHash && client.torrents.find(existingTorrent => torrent.infoHash === existingTorrent.infoHash)) || client.torrents.find(existingTorrent => Array.from(event.detail.input).find(file => file.name === existingTorrent.name))
           if (existingTorrent) {
             if (existingTorrent.done) {
-              // Not needed, because this torrent must have been saved when loaded on metadata
-              //this.onReady(existingTorrent, event.detail.uid, event.detail.room, true)
-              this.onInfoHash(existingTorrent)
+              // Not needed to onReady, onInfoHash or onError because this torrent must have been saved when loaded
               return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {torrent: existingTorrent, streamToServerReadyPromise: this.streamToServerReadyPromise}, existingTorrent)
             } else {
               await Webtorrent.destroyTorrent(existingTorrent, existingTorrent.infoHash.toLowerCase())
               torrent = await addOrSeedFunc(event.detail.input, event.detail.opts)
               this.onInfoHash(torrent)
               // save to storage
-              this.onReady(torrent, event.detail.uid, event.detail.room, true)
+              this.onReady(torrent, event.detail.uid, event.detail.room, event.detail.cid, true)
               this.onError(torrent)
               return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise}, torrent)
             }
@@ -300,16 +311,32 @@ export default class Webtorrent extends WebWorker() {
 
     this.webtorrentResetEventListener = event => this.reset()
 
+    this.webtorrentIsStalledEventListener = async event => {
+      if (!event.detail.torrent.done) {
+        const torrentContainer = event.detail || await Webtorrent.#torrentFileMap.get(event.detail.torrent.infoHash)
+        console.log('****webtorrentIsStalledEventListener*****', event.detail.torrent.infoHash, torrentContainer)
+        /*if (torrentContainer?.cid) this.dispatchEvent(new CustomEvent('ipfs-cat', {
+          detail: {
+            cid: torrentContainer.cid,
+            torrent: event.detail.torrent,
+            room: torrentContainer.room,
+            uid: event.detail.uid || torrentContainer.added[0]?.uid
+          },
+          bubbles: true,
+          cancelable: true,
+          composed: true
+        }))*/
+      }
+    }
+    
     let resetTimeoutId
-    this.webtorrentIsStalledEventListener = event => {
+    this.onlineEventListener = event => {
       clearTimeout(resetTimeoutId)
       resetTimeoutId = setTimeout(async () => {
         const client = await this.clientPromise
         if (client.torrents.some(torrent => torrent.numPeers > 0) && client.torrents.every(torrent => !torrent.downloadSpeed && !torrent.uploadSpeed)) this.reset()
       }, stallTimeout)
     }
-
-    this.onlineEventListener = event => this.reset()
   }
 
   async init () {
@@ -451,8 +478,8 @@ export default class Webtorrent extends WebWorker() {
     torrent.on('infoHash', () => Webtorrent.#torrentMap.set(torrent.infoHash.toLowerCase(), Promise.resolve({torrent, streamToServerReadyPromise: this.streamToServerReadyPromise})))
   }
 
-  onReady (torrent, uid, room, self) {
-    torrent.on('ready', () => Webtorrent.#torrentFileMap.set(torrent.infoHash.toLowerCase(), this.webWorker(Webtorrent.saveTorrentFile, torrent.infoHash.toLowerCase(), torrent.torrentFile, location.href, uid, room, self)))
+  onReady (torrent, uid, room, cid, self) {
+    torrent.on('ready', () => Webtorrent.#torrentFileMap.set(torrent.infoHash.toLowerCase(), this.webWorker(Webtorrent.saveTorrentFile, torrent.infoHash.toLowerCase(), torrent.torrentFile, location.href, uid, room, cid, self)))
   }
 
   onError (torrent) {
@@ -461,7 +488,7 @@ export default class Webtorrent extends WebWorker() {
   }
 
   // NOTE: This function must run in a webworker, otherwise getFileHandle does not have the function: createSyncAccessHandle
-  static async saveTorrentFile (infoHash, torrentFile, href, uid, room, self = false) {
+  static async saveTorrentFile (infoHash, torrentFile, href, uid, room, cid, self = false) {
     /** @type {FileSystemDirectoryHandle} */
     const opfsTorrents = await navigator.storage.getDirectory().then(opfsRoot => opfsRoot.getDirectoryHandle('torrents', { create: true }))
     // @ts-ignore
@@ -480,6 +507,7 @@ export default class Webtorrent extends WebWorker() {
     torrentContainers = {
       self: torrentContainers.self ? torrentContainers.self : self,
       room: torrentContainers.room ? torrentContainers.room : room,
+      cid: torrentContainers.cid ? torrentContainers.cid : cid,
       torrentFile: Array.from(torrentFile),
       added: [{
         timestamp: Date.now(),
