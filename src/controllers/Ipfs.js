@@ -10,6 +10,15 @@ import '../ipfs/ipfs-unixfs-importer@17.0.1/dist/index.min.js'
 /* global BlockstoreCore */
 
 /**
+ * @typedef {{
+ *  origin: string,
+ *  supports: ('add'|'cat'|'web-seed'|'fetch')[],
+ *  hasError?: boolean,
+ *  client?: any
+ * }} GATEWAY
+ */
+
+/**
  * https://github.com/ipfs/js-kubo-rpc-client/tree/main
  * // TODO: IPFS service provider choose by ping / https://ipfs.qzz.io/ type health check / ipfs hosted file with providers
  * // TODO: Error handling (CORS)
@@ -21,27 +30,88 @@ export default class Ipfs extends HTMLElement {
   constructor() {
     super()
 
-    /** @type {string} */
-    this.importMetaUrl = import.meta.url.replace(/(.*\/)(.*)$/, '$1')
     // set attribute namespace
     this.namespace = this.getAttribute('namespace') || 'ipfs-'
-    const stallTimeout = 6000 // has to be less than the timeout at view
-    this.clientUrl = 'https://ipfs.oversas.org' // TODO: get multiple public ipfs urls from environment and on error switch
+    /** @type {GATEWAY[]} */
+    this.gateways = this.hasAttribute('preset-gateways')
+      ? [
+        {
+          origin: 'https://ipfs.oversas.org',
+          supports: ['add', 'cat', 'web-seed', 'fetch']
+        },
+        {
+          origin: 'https://ipfs.io',
+          supports: ['web-seed', 'fetch']
+        },
+        {
+          origin: 'https://ipfs.filebase.io',
+          supports: ['web-seed', 'fetch']
+        },
+        {
+          origin: 'https://ipfs.network.thegraph.com',
+          supports: ['add', 'cat', 'fetch']
+        },
+        {
+          origin: 'https://cdn.ipfsscan.io',
+          supports: ['add', 'web-seed', 'fetch']
+        },
+        {
+          origin: 'https://ipfs.decentralized-content.com',
+          supports: ['web-seed', 'fetch']
+        },
+        {
+          origin: 'https://dweb.link',
+          supports: ['web-seed', 'fetch']
+        },
+        {
+          origin: 'https://dget.top',
+          supports: ['fetch']
+        },
+        {
+          origin: 'https://gw.ipfs-lens.dev',
+          supports: ['web-seed', 'fetch']
+        },
+        {
+          origin: 'https://api.thegraph.com',
+          supports: ['add', 'cat', 'fetch']
+        },
+        {
+          origin: 'https://gateway.pinata.cloud',
+          supports: ['web-seed', 'fetch']
+        },
+        {
+          origin: 'https://ipfs.effect.ai',
+          supports: ['add', 'web-seed', 'fetch']
+        },
+        {
+          origin: 'https://ipfs.questbook.app',
+          supports: ['add', 'cat']
+        },
+        {
+          origin: 'https://gw-seattle.crustcloud.io:443',
+          supports: ['add', 'cat']
+        }
+      ]
+      : []
+    // @ts-ignore
+    if (this.getAttribute('preset-gateways') && typeof this.getAttribute('preset-gateways') === 'string') this.gateways = JSON.parse(this.getAttribute('preset-gateways'))
+    // @ts-ignore
+    if (Environment?.ipfsGateways) this.gateways = Environment.ipfsGateways.concat(this.gateways)
     this.cidVersion = 0
     this.rawLeaves = false
     this.clientRpcVersion = `/api/v${this.cidVersion}`
-    // init is going to fill this Promise
-    this.setClientPromise()
 
     // torrent.addWebSeed from filesMetadata
-    this.ipfsAddEventListener = event => {
+    this.torrentAddWebSeed = event => {
       const addWebSeedFunc = async torrent => {
         try {
           // we avoid sending the torrent file metadata with the addWebSeed link
           const filesMetadata = JSON.parse(await this.catCidToText(event.detail.cid)).filter(fileMetadata => fileMetadata.type !== 'application/x-bittorrent')
           // https://www.bittorrent.org/beps/bep_0019.html calls a single file .../webtorrent-web-seed/ and multiple .../webtorrent-web-seed/file1/file2
           // also it delivers a range in the header, which can span multiple files, thats why we pass some torrent file data through the addWebSeed url to the service worker
-          torrent.addWebSeed(`${this.clientUrl}/ipfs/files-metadata/${encodeURIComponent(JSON.stringify(filesMetadata))}/webtorrent-web-seed/`)
+          this.gateways.forEach(gateway => {
+            if (gateway.supports.includes('web-seed')) torrent.addWebSeed(`${gateway.origin}/ipfs/files-metadata/${encodeURIComponent(JSON.stringify(filesMetadata))}/webtorrent-web-seed/`)
+          })
         } catch (error) {
           console.warn('IPFS addWebSeed filesMetadata error!', error)
         }
@@ -55,8 +125,9 @@ export default class Ipfs extends HTMLElement {
     this.ipfsCatEventListener = event => {
       if (!event.detail.cid) return
       Promise.all(event.detail.torrent.files.map(async file => {
-        const client = await this.clientPromise
+        const client = this.getClient('cat').client
         const chunks = []
+        // TODO: cat or fetch
         for await (const chunk of client.cat(`${event.detail.cid}/${file.name}`)) {
           chunks.push(chunk)
         }
@@ -102,54 +173,15 @@ export default class Ipfs extends HTMLElement {
     this.ipfsGetTorrentFileEventListener = async event => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}torrent-file`, {cid: event.detail.cid, torrentFile: await this.getTorrentFile(event.detail.cid)})
   }
 
-  async init () {
-    if (this.clientDestroyedPromise) await this.clientDestroyedPromise
-    // @ts-ignore
-    if (this.clientPromise.done) return
-    // @ts-ignore
-    const client = KuboRpcClient.create({url: `${this.clientUrl}${this.clientRpcVersion}`})
-    // @ts-ignore
-    this.clientPromiseResolve(client)
-    this.setClientPromise()
-    // @ts-ignore
-    this.clientPromiseResolve(client)
-  }
-
-  async destroy () {
-    if (this.clientDestroyedPromise) await this.clientDestroyedPromise
-    let clientDestroyedResolve = err => err
-    /** @type {any} */
-    this.clientDestroyedPromise = new Promise(resolve => (clientDestroyedResolve = resolve))
-    // @ts-ignore
-    if (!this.clientPromise.done) {
-      clientDestroyedResolve(null)
-      return this.clientDestroyedPromise
-    }
-    const client = await this.clientPromise
-    if (client.destroyed) {
-      clientDestroyedResolve(null)
-      return this.clientDestroyedPromise
-    }
-    client.stop().then(() => {
-      // init is going to fill this Promise
-      this.setClientPromise()
-      clientDestroyedResolve(null)
-      this.clientDestroyedPromise = null
-    })
-    return this.clientDestroyedPromise
-  }
-
   connectedCallback () {
-    this.init()
-    document.body.addEventListener(`${this.namespace}add`, this.ipfsAddEventListener)
+    document.body.addEventListener(`${this.namespace}add-web-seed`, this.torrentAddWebSeed)
     document.body.addEventListener(`${this.namespace}cat`, this.ipfsCatEventListener)
     document.body.addEventListener(`${this.namespace}seed`, this.ipfsSeedEventListener)
     document.body.addEventListener(`${this.namespace}get-torrent-file`, this.ipfsGetTorrentFileEventListener)
   }
 
   disconnectedCallback () {
-    this.destroy()
-    document.body.removeEventListener(`${this.namespace}add`, this.ipfsAddEventListener)
+    document.body.removeEventListener(`${this.namespace}add-web-seed`, this.torrentAddWebSeed)
     document.body.removeEventListener(`${this.namespace}cat`, this.ipfsCatEventListener)
     document.body.removeEventListener(`${this.namespace}seed`, this.ipfsSeedEventListener)
     document.body.removeEventListener(`${this.namespace}get-torrent-file`, this.ipfsGetTorrentFileEventListener)
@@ -186,16 +218,6 @@ export default class Ipfs extends HTMLElement {
       return false
     }
     return respond()
-  }
-
-  setClientPromise () {
-    // init is going to fill this Promise
-    this.clientPromiseResolve = client => client
-    this.clientPromise = new Promise(resolve => (this.clientPromiseResolve = resolve))
-    // @ts-ignore
-    this.clientPromise.done = false
-    // @ts-ignore
-    this.clientPromise.finally(() => (this.clientPromise.done = true))
   }
 
   // TODO: Error handling for all client.cat, client.add, etc.
@@ -236,7 +258,7 @@ export default class Ipfs extends HTMLElement {
    * @returns {Promise<string>} // returns the filesMetadata cid
    */
   async addAll (inputFiles, torrent) {
-    const client = await this.clientPromise
+    const client = this.getClient('add').client
     const filesMetadata = []
     // upload files and collect metadata
     let counter = 0
@@ -246,7 +268,7 @@ export default class Ipfs extends HTMLElement {
       rawLeaves: this.rawLeaves,
       wrapWithDirectory: false
     })) {
-      filesMetadata.push(Ipfs.createMetadata(inputFiles, torrent, result, counter))
+      filesMetadata.push(Ipfs.createFileMetadata(inputFiles, torrent, result, counter))
       counter++
     }
     return (await client.add(new File(
@@ -276,7 +298,7 @@ export default class Ipfs extends HTMLElement {
     for await (const result of IpfsUnixfsImporter.importer([{
       path: 'fileList.json',
       content: new File(
-        [JSON.stringify(await this.createFilesMetadata(inputFiles, torrent))],
+        [JSON.stringify(await this.createFileListMetadata(inputFiles, torrent))],
         'fileList.json',
         { type: 'application/json' }
       ).stream()
@@ -297,7 +319,7 @@ export default class Ipfs extends HTMLElement {
    * @param {any} torrent
    * @returns {Promise<{cid: string, name: string | 'torrent', type: string | 'application/x-bittorrent', size?: number, offset?: number, length?: number}[]>}
    */
-  async createFilesMetadata (inputFiles, torrent) {
+  async createFileListMetadata (inputFiles, torrent) {
     // @ts-ignore
     const blockstore = new BlockstoreCore.MemoryBlockstore()
     const filesMetadata = []
@@ -310,7 +332,7 @@ export default class Ipfs extends HTMLElement {
       })) {
         // importer emits directory entries too sometimes
         if (!result.path) continue
-        filesMetadata.push(Ipfs.createMetadata(inputFiles, torrent, result, i))
+        filesMetadata.push(Ipfs.createFileMetadata(inputFiles, torrent, result, i))
       }
     }))
     return filesMetadata
@@ -345,7 +367,7 @@ export default class Ipfs extends HTMLElement {
    * @param {any} torrent
    * @returns {{cid: string, name: string | 'torrent', type: string | 'application/x-bittorrent', size?: number, offset?: number, length?: number}}
    */
-  static createMetadata (inputFiles, torrent, result, counter) {
+  static createFileMetadata (inputFiles, torrent, result, counter) {
     return inputFiles[counter] ?
       {
         cid: result.cid.toString(),
@@ -370,9 +392,10 @@ export default class Ipfs extends HTMLElement {
    * @returns {Promise<string>}
    */
   async catCidToText (cid) {
-    const client = await this.clientPromise
+    const client = this.getClient('cat').client
     const decoder = new TextDecoder()
     let text = ''
+    // TODO: cat or fetch
     for await (const chunk of client.cat(cid)) {
       text += decoder.decode(chunk, { stream: true })
     }
@@ -381,8 +404,9 @@ export default class Ipfs extends HTMLElement {
   }
 
   async catCidToFile (cid, name, type) {
-    const client = await this.clientPromise
+    const client = this.getClient('cat').client
     const chunks = []
+    // TODO: cat or fetch
     for await (const chunk of client.cat(cid)) {
       chunks.push(chunk)
     }
@@ -399,5 +423,22 @@ export default class Ipfs extends HTMLElement {
     const json = JSON.parse(await this.catCidToText(cid))
     const torrentFileEntry = json.find(entry => entry.type === 'application/x-bittorrent')
     return this.catCidToFile(torrentFileEntry.cid, torrentFileEntry.name, torrentFileEntry.type)
+  }
+
+  /**
+   * Create a KuboRpcClient
+   * 
+   * @param {'add'|'cat'|'web-seed'|'fetch'} usage
+   * @param {boolean} [ignoreError=false]
+   * @returns {GATEWAY}
+   */
+  getClient (usage, ignoreError = false) {
+    return this.gateways.find(gateway => {
+      if (!ignoreError && gateway.hasError) return false
+      if (!gateway.supports.includes(usage)) return false
+      // @ts-ignore
+      if (!gateway.client) gateway.client = KuboRpcClient.create({url: `${gateway.origin}${this.clientRpcVersion}`})
+      return true
+    }) || this.getClient(usage, true)
   }
 }

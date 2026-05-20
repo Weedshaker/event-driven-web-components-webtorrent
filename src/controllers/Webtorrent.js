@@ -161,7 +161,7 @@ export default class Webtorrent extends WebWorker() {
       ]
       : []
     // @ts-ignore
-    if (typeof this.getAttribute('preset-trackers') === 'string') presetTrackers = this.getAttribute('preset-trackers').split(',')
+    if (this.getAttribute('preset-trackers') && typeof this.getAttribute('preset-trackers') === 'string') presetTrackers = this.getAttribute('preset-trackers').split(',')
     // @ts-ignore
     if (Environment?.trackers) presetTrackers = Environment.trackers.concat(presetTrackers)
     if (this.hasAttribute('fetch-trackers')) {
@@ -253,7 +253,7 @@ export default class Webtorrent extends WebWorker() {
       this.onError(torrent)
       this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, result, result.torrent, () => {
         // inform ipfs about this cid to addWebSeed to the torrent
-        if (cid) this.dispatchEvent(new CustomEvent('ipfs-add', {
+        if (cid) this.dispatchEvent(new CustomEvent('ipfs-add-web-seed', {
           detail: {
             cid,
             torrent

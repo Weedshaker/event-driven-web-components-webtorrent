@@ -20,7 +20,7 @@ export default class Webtorrent extends Intersection() {
     
     // set attribute namespace
     this.namespace = this.getAttribute('namespace') || 'webtorrent-'
-    this.stallTimeout = 60000
+    this.stallTimeout = 10000
     /** @type {{renderTarget, appendTarget, figureTarget, file, tagName}[]} */
     this.webtorrentTargetElements = []
     this.renderTorrentQueue = []
@@ -323,7 +323,8 @@ export default class Webtorrent extends Intersection() {
               cancelable: true,
               composed: true
             }))
-            return this.renderTorrent(true)
+            activityFunc()
+            return // this.renderTorrent(true) // TODO: figure what to do at this point, may ipfs resets the torrent anyway with new seed, test this with gateway which can not fetch nor web-seed, that this falls back to cat
           }
           if (torrent.metadata) progressElement.setAttribute('value', 100 * torrent.progress)
           this.progressText.textContent = `${(100 * torrent.progress).toFixed(1)}%`
