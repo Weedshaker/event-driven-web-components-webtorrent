@@ -110,7 +110,7 @@ export default class Ipfs extends HTMLElement {
           // https://www.bittorrent.org/beps/bep_0019.html calls a single file .../webtorrent-web-seed/ and multiple .../webtorrent-web-seed/file1/file2
           // also it delivers a range in the header, which can span multiple files, thats why we pass some torrent file data through the addWebSeed url to the service worker
           this.gateways.forEach(gateway => {
-            if (gateway.supports.includes('web-seed')) torrent.addWebSeed(`${gateway.origin}/ipfs/files-metadata/${encodeURIComponent(JSON.stringify(filesMetadata))}/webtorrent-web-seed/`)
+            if (!gateway.hasError && gateway.supports.includes('web-seed')) torrent.addWebSeed(`${gateway.origin}/ipfs/files-metadata/${encodeURIComponent(JSON.stringify(filesMetadata))}/webtorrent-web-seed/`)
           })
         } catch (error) {
           console.warn('IPFS addWebSeed filesMetadata error!', error)
@@ -125,7 +125,7 @@ export default class Ipfs extends HTMLElement {
     this.ipfsCatEventListener = event => {
       if (!event.detail.cid) return
       Promise.all(event.detail.torrent.files.map(async file => {
-        const client = this.getClient('cat').client
+        const client = this.getGateway('cat').gateway?.client
         const chunks = []
         // TODO: cat or fetch
         for await (const chunk of client.cat(`${event.detail.cid}/${file.name}`)) {
@@ -171,6 +171,10 @@ export default class Ipfs extends HTMLElement {
     }
 
     this.ipfsGetTorrentFileEventListener = async event => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}torrent-file`, {cid: event.detail.cid, torrentFile: await this.getTorrentFile(event.detail.cid)})
+
+    this.onlineEventListener = event => {
+      this.gateways.forEach(gateway => (gateway.hasError = false))
+    }
   }
 
   connectedCallback () {
@@ -178,6 +182,7 @@ export default class Ipfs extends HTMLElement {
     document.body.addEventListener(`${this.namespace}cat`, this.ipfsCatEventListener)
     document.body.addEventListener(`${this.namespace}seed`, this.ipfsSeedEventListener)
     document.body.addEventListener(`${this.namespace}get-torrent-file`, this.ipfsGetTorrentFileEventListener)
+    self.addEventListener('online', this.onlineEventListener)
   }
 
   disconnectedCallback () {
@@ -185,6 +190,7 @@ export default class Ipfs extends HTMLElement {
     document.body.removeEventListener(`${this.namespace}cat`, this.ipfsCatEventListener)
     document.body.removeEventListener(`${this.namespace}seed`, this.ipfsSeedEventListener)
     document.body.removeEventListener(`${this.namespace}get-torrent-file`, this.ipfsGetTorrentFileEventListener)
+    self.removeEventListener('online', this.onlineEventListener)
   }
 
   /**
@@ -258,9 +264,10 @@ export default class Ipfs extends HTMLElement {
    * @returns {Promise<string>} // returns the filesMetadata cid
    */
   async addAll (inputFiles, torrent) {
-    const client = this.getClient('add').client
+    const client = this.getGateway('add').gateway?.client
     const filesMetadata = []
     // upload files and collect metadata
+    // TODO: add all separate, so that when huge files get rejected at least the torrent and metadata file gets uploaded
     let counter = 0
     for await (const result of client.addAll(Ipfs.createFileListArray(inputFiles, torrent), {
       pin: true,
@@ -374,7 +381,6 @@ export default class Ipfs extends HTMLElement {
         //lastModified: inputFiles[counter].lastModified, // avoid this, otherwise the cid is always going to change
         name: inputFiles[counter].name,
         type: inputFiles[counter].type,
-        size: inputFiles[counter].size,
         offset: torrent.files[counter].offset,
         length: torrent.files[counter].length
       }
@@ -392,7 +398,7 @@ export default class Ipfs extends HTMLElement {
    * @returns {Promise<string>}
    */
   async catCidToText (cid) {
-    const client = this.getClient('cat').client
+    const client = this.getGateway('cat').gateway?.client
     const decoder = new TextDecoder()
     let text = ''
     // TODO: cat or fetch
@@ -404,7 +410,7 @@ export default class Ipfs extends HTMLElement {
   }
 
   async catCidToFile (cid, name, type) {
-    const client = this.getClient('cat').client
+    const client = this.getGateway('cat').gateway?.client
     const chunks = []
     // TODO: cat or fetch
     for await (const chunk of client.cat(cid)) {
@@ -430,15 +436,68 @@ export default class Ipfs extends HTMLElement {
    * 
    * @param {'add'|'cat'|'web-seed'|'fetch'} usage
    * @param {boolean} [ignoreError=false]
-   * @returns {GATEWAY}
+   * @returns {{gateway: GATEWAY | null, ignoreError: boolean}}
    */
-  getClient (usage, ignoreError = false) {
-    return this.gateways.find(gateway => {
+  getGateway (usage, ignoreError = false) {
+    const gateway = this.gateways.find(gateway => {
       if (!ignoreError && gateway.hasError) return false
       if (!gateway.supports.includes(usage)) return false
       // @ts-ignore
       if (!gateway.client) gateway.client = KuboRpcClient.create({url: `${gateway.origin}${this.clientRpcVersion}`})
       return true
-    }) || this.getClient(usage, true)
+    })
+    return gateway
+      ? {gateway, ignoreError}
+      : ignoreError
+        ? {gateway: null, ignoreError}
+        : this.getGateway(usage, true)
+  }
+
+  /**
+   * cat resp. download through ipfs client
+   * 
+   * @param {string} cid
+   * @returns {Promise<any[]|null>}
+   */
+  cat (cid) {
+    const func = async () => {
+      const gatewayResult = this.getGateway('cat')
+      if (gatewayResult.gateway?.client) {
+        const client = gatewayResult.gateway.client
+        try {
+          const chunks = []
+          for await (const chunk of client.cat(cid)) {
+            chunks.push(chunk)
+          }
+          gatewayResult.gateway.hasError = false
+          return chunks
+        } catch (error) {
+          gatewayResult.gateway.hasError = true
+          if (!gatewayResult.ignoreError) {
+            return this.cat(cid)
+          } else {
+            return null
+          }
+        }
+      } else {
+        console.warn('No more viable gateways...', this.gateways)
+        return null
+      }
+    }
+    return this.resolveWhenOnline(func)
+  }
+
+  /**
+   * Executes a function as soon as only
+   * 
+   * @param {()=>any} func
+   * @returns {Promise<any>}
+   */
+  resolveWhenOnline (func) {
+    let resolveFunc = resolve => resolve
+    const promise = new Promise(resolve => (resolveFunc = resolve))
+    if (navigator.onLine) resolveFunc(func())
+    self.addEventListener('online', () => resolveFunc(func()), {once: true})
+    return promise
   }
 }
