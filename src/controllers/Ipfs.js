@@ -278,11 +278,7 @@ export default class Ipfs extends HTMLElement {
       filesMetadata.push(Ipfs.createFileMetadata(inputFiles, torrent, result, counter))
       counter++
     }
-    return (await client.add(new File(
-      [JSON.stringify(filesMetadata)],
-      'fileList.json',
-      { type: 'application/json' }
-    ), {
+    return (await client.add(Ipfs.createFileListJsonFile(filesMetadata), {
       pin: true,
       cidVersion: this.cidVersion,
       rawLeaves: this.rawLeaves,
@@ -304,11 +300,7 @@ export default class Ipfs extends HTMLElement {
     // @ts-ignore
     for await (const result of IpfsUnixfsImporter.importer([{
       path: 'fileList.json',
-      content: new File(
-        [JSON.stringify(await this.createFileListMetadata(inputFiles, torrent))],
-        'fileList.json',
-        { type: 'application/json' }
-      ).stream()
+      content: Ipfs.createFileListJsonFile(await this.createFileListMetadata(inputFiles, torrent)).stream()
     }], blockstore, {
       cidVersion: this.cidVersion,
       rawLeaves: this.rawLeaves,
@@ -389,6 +381,14 @@ export default class Ipfs extends HTMLElement {
         name: 'torrent',
         type: 'application/x-bittorrent'
       }
+  }
+
+  static createFileListJsonFile (data) {
+    return new File(
+      [JSON.stringify(data.sort((a, b) => a.cid.localeCompare(b.cid)))],
+      'fileList.json',
+      { type: 'application/json' }
+    )
   }
 
   /**

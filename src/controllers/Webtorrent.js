@@ -131,7 +131,9 @@ export default class Webtorrent extends WebWorker() {
     this.setClientPromise()
     const presetAddOpts = {
       destroyStoreOnDestroy: false,
-      createdBy: 'decentral-ninja'
+      createdBy: 'decentral-ninja',
+      creationDate: 1, // must be 1 to force the same cid later
+      pieceLength: 262144
     }
     // trackers
     let presetTrackers = this.hasAttribute('preset-trackers')
