@@ -276,11 +276,12 @@ export default class Webtorrent extends WebWorker() {
     // room string - for metadata at the opfs torrentFile store
     this.webtorrentSeedEventListener = async event => {
       const client = await this.clientPromise
+      const input = Array.from(event.detail.input).sort((a, b) => a.name.localeCompare(b.name))
       // when the first file in the file list is a torrent file, load the torrent file
-      const addOrSeedFunc = async (input, opts) => Array.from(input)[0]?.type === 'application/x-bittorrent'
-        ? client.add(Array.from(input)[0], Object.assign(opts || {}, await this.addOpts))
-        : client.seed(Array.from(input).sort((a, b) => a.name.localeCompare(b.name)), Object.assign(opts || {}, await this.addOpts))
-      let torrent = await addOrSeedFunc(event.detail.input, event.detail.opts)
+      const addOrSeedFunc = async (input, opts) => input.length === 1 && input[0]?.type === 'application/x-bittorrent'
+        ? client.add(input[0], Object.assign(opts || {}, await this.addOpts))
+        : client.seed(input, Object.assign(opts || {}, await this.addOpts))
+      let torrent = await addOrSeedFunc(input, event.detail.opts)
       this.onInfoHash(torrent)
       // save to storage
       this.onReady(torrent, event.detail.uid, event.detail.room, event.detail.cid, true)
@@ -290,14 +291,14 @@ export default class Webtorrent extends WebWorker() {
         // to detect that this torrent already exists, is by looking for the destroyed property or else the infoHash would have to be precalculated
         if (torrent.destroyed) {
           clearInterval(checkTorrentDestroyedIntervalId)
-          const existingTorrent = (torrent.infoHash && client.torrents.find(existingTorrent => torrent.infoHash === existingTorrent.infoHash)) || client.torrents.find(existingTorrent => Array.from(event.detail.input).find(file => file.name === existingTorrent.name))
+          const existingTorrent = (torrent.infoHash && client.torrents.find(existingTorrent => torrent.infoHash === existingTorrent.infoHash)) || client.torrents.find(existingTorrent => input.find(file => file.name === existingTorrent.name))
           if (existingTorrent) {
             if (existingTorrent.done) {
               // Not needed to onReady, onInfoHash or onError because this torrent must have been saved when loaded
               return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {torrent: existingTorrent, streamToServerReadyPromise: this.streamToServerReadyPromise}, existingTorrent)
             } else {
               await Webtorrent.destroyTorrent(existingTorrent, existingTorrent.infoHash.toLowerCase())
-              torrent = await addOrSeedFunc(event.detail.input, event.detail.opts)
+              torrent = await addOrSeedFunc(input, event.detail.opts)
               this.onInfoHash(torrent)
               // save to storage
               this.onReady(torrent, event.detail.uid, event.detail.room, event.detail.cid, true)
