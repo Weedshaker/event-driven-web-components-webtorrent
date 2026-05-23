@@ -165,9 +165,11 @@ export default class Ipfs extends HTMLElement {
         this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {cid: (cidTwo = await this.addAll(inputFiles, torrent))})
         if (cidOne && cidTwo && cidOne !== cidTwo) console.warn('Error while creating cid\'s', {cidOne, cidTwo})
       }
+      // preferred to consume the files directly from File Input but must be sorted analog controller/Webtorrent.js client.seed L: 282, sometimes the torrent.files made trouble to stream, which resulted in some Readable Stream error
+      const files = event.detail.input ? Array.from(event.detail.input).sort((a, b) => a.name.localeCompare(b.name)) : event.detail.torrent.files
       // wait for torrent to be ready, that we can read offset and length
-      if (event.detail.torrent.ready) return addAllFunc(Array.from(event.detail.torrent.files), event.detail.torrent)
-      event.detail.torrent.on('ready', () => addAllFunc(Array.from(event.detail.torrent.files), event.detail.torrent))
+      if (event.detail.torrent.ready) return addAllFunc(files, event.detail.torrent)
+      event.detail.torrent.on('ready', () => addAllFunc(files, event.detail.torrent))
     }
 
     this.ipfsGetTorrentFileEventListener = async event => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}torrent-file`, {cid: event.detail.cid, torrentFile: await this.getTorrentFile(event.detail.cid)})
