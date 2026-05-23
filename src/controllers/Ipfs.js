@@ -101,19 +101,19 @@ export default class Ipfs extends HTMLElement {
     this.rawLeaves = false
     this.clientRpcVersion = `/api/v${this.cidVersion}`
 
-    // torrent.addWebSeed from filesMetadata
+    // torrent.addWebSeed from filesCidMetadata
     this.torrentAddWebSeed = event => {
       const addWebSeedFunc = async torrent => {
         try {
           // we avoid sending the torrent file metadata with the addWebSeed link
-          const filesMetadata = JSON.parse(await this.catCidToText(event.detail.cid)).filter(fileMetadata => fileMetadata.type !== 'application/x-bittorrent')
+          const filesCidMetadata = JSON.parse(await this.catCidToText(event.detail.cid)).filter(fileMetadata => fileMetadata.type !== 'application/x-bittorrent')
           // https://www.bittorrent.org/beps/bep_0019.html calls a single file .../webtorrent-web-seed/ and multiple .../webtorrent-web-seed/file1/file2
           // also it delivers a range in the header, which can span multiple files, thats why we pass some torrent file data through the addWebSeed url to the service worker
           this.gateways.forEach(gateway => {
-            if (!gateway.hasError && gateway.supports.includes('web-seed')) torrent.addWebSeed(`${gateway.origin}/ipfs/files-metadata/${encodeURIComponent(JSON.stringify(filesMetadata))}/webtorrent-web-seed/`)
+            if (!gateway.hasError && gateway.supports.includes('web-seed')) torrent.addWebSeed(`${gateway.origin}/ipfs/files-metadata/${encodeURIComponent(JSON.stringify(filesCidMetadata))}/webtorrent-web-seed/`)
           })
         } catch (error) {
-          console.warn('IPFS addWebSeed filesMetadata error!', error)
+          console.warn('IPFS addWebSeed filesCidMetadata error!', error)
         }
       }
       // wait for torrent to be ready, that we can read offset and length
@@ -159,9 +159,9 @@ export default class Ipfs extends HTMLElement {
     this.ipfsSeedEventListener = event => {
       const addAllFunc = async (inputFiles, torrent) => {
         let cidOne, cidTwo
-        // returns the filesMetadata cid
-        if (event.detail?.resolveCid) this.respond(event.detail?.resolveCid, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {cid: (cidOne = await this.createFileListCid(inputFiles, torrent))})
-        // adds and returns the filesMetadata cid
+        // returns the filesCidMetadata cid
+        if (event.detail?.resolveCid) this.respond(event.detail.resolveCid, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {cid: (cidOne = await this.createFileListCid(inputFiles, torrent))})
+        // adds and returns the filesCidMetadata cid
         this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {cid: (cidTwo = await this.addAll(inputFiles, torrent))})
         if (cidOne && cidTwo && cidOne !== cidTwo) console.warn('Error while creating cid\'s', {cidOne, cidTwo})
       }
@@ -226,64 +226,67 @@ export default class Ipfs extends HTMLElement {
     return respond()
   }
 
-  // TODO: Error handling for all client.cat, client.add, etc.
-    /*
-    for await (const chunk of client.cat(cid, {
-      timeout: 10000
-    })) {
-      ...
-    }
-    */
-    // ----------------
-    // TODO: use abort controller array per client and clear all when client gets connected to an other ipfs service provider
-    /*
-    const controller = new AbortController()
-
-    try {
-      for await (const chunk of client.cat(cid, {
-        signal: controller.signal
-      })) {
-        text += decoder.decode(chunk, { stream: true })
-      }
-
-      text += decoder.decode()
-    } catch (err) {
-      if (controller.signal.aborted) {
-        console.log('Download cancelled')
-      } else {
-        console.error(err)
-      }
-    }
-    */
-
   /**
-   * Bundles all the files cid's, torrent.files metadata and torrentFile itself into one JSON called filesMetadata and returns it's cid
+   * Bundles all the files cid's, torrent.files metadata and torrentFile itself into one JSON called filesCidMetadata and returns it's cid
    * 
    * @param {FileList} inputFiles
    * @param {any} torrent
-   * @returns {Promise<string>} // returns the filesMetadata cid
+   * @returns {Promise<string>} // returns the filesCidMetadata cid
    */
   async addAll (inputFiles, torrent) {
     const client = this.getGateway('add').gateway?.client
-    const filesMetadata = []
+    // @ts-ignore
+    const blockstore = new BlockstoreCore.MemoryBlockstore()
+    const filesCidMetadata = []
     // upload files and collect metadata
-    // TODO: add all separate, so that when huge files get rejected at least the torrent and metadata file gets uploaded
-    let counter = 0
-    for await (const result of client.addAll(Ipfs.createFileListArray(inputFiles, torrent), {
-      pin: true,
-      cidVersion: this.cidVersion,
-      rawLeaves: this.rawLeaves,
-      wrapWithDirectory: false
-    })) {
-      filesMetadata.push(Ipfs.createFileMetadata(inputFiles, torrent, result, counter))
-      counter++
+    await Promise.all(Ipfs.createFileListArray(inputFiles, torrent).map(async (file, i) => {
+      try {
+        // TODO: abstract the client.add analog client.cat with resolveWhenOnline
+        filesCidMetadata.push(Ipfs.createFileMetadata(inputFiles, torrent, await client.add(file, {
+          pin: true,
+          cidVersion: this.cidVersion,
+          rawLeaves: this.rawLeaves,
+          wrapWithDirectory: false
+        }), i))
+      } catch (error) {
+        console.warn('Failed to add...', error, file)
+        // create the cid local when .add fails to at least get the file list json file
+        // @ts-ignore
+        for await (const result of IpfsUnixfsImporter.importer([file], blockstore, {
+          cidVersion: this.cidVersion,
+          rawLeaves: this.rawLeaves,
+          wrapWithDirectory: false
+        })) {
+          // importer emits directory entries too sometimes
+          if (!result.path) continue
+          filesCidMetadata.push(Ipfs.createFileMetadata(inputFiles, torrent, result, i))
+        }
+      }
+    }))
+    try {
+      return (await client.add(Ipfs.createFileListJsonFile(filesCidMetadata), {
+        pin: true,
+        cidVersion: this.cidVersion,
+        rawLeaves: this.rawLeaves,
+        wrapWithDirectory: false
+      })).cid.toString()
+    } catch (error) {
+      console.warn('Failed to add fileList.json', error, filesCidMetadata)
+      // TODO: resolveWhenOnline
+      let fileListCid = null
+      // @ts-ignore
+      for await (const result of IpfsUnixfsImporter.importer([{
+        path: 'fileList.json',
+        content: Ipfs.createFileListJsonFile(filesCidMetadata).stream()
+      }], blockstore, {
+        cidVersion: this.cidVersion,
+        rawLeaves: this.rawLeaves,
+        wrapWithDirectory: false
+      })) {
+        if (result.path === 'fileList.json') fileListCid = result.cid.toString()
+      }
+      return fileListCid
     }
-    return (await client.add(Ipfs.createFileListJsonFile(filesMetadata), {
-      pin: true,
-      cidVersion: this.cidVersion,
-      rawLeaves: this.rawLeaves,
-      wrapWithDirectory: false
-    })).cid.toString()
   }
 
   /**
@@ -300,7 +303,7 @@ export default class Ipfs extends HTMLElement {
     // @ts-ignore
     for await (const result of IpfsUnixfsImporter.importer([{
       path: 'fileList.json',
-      content: Ipfs.createFileListJsonFile(await this.createFileListMetadata(inputFiles, torrent)).stream()
+      content: Ipfs.createFileListJsonFile(await this.createFileListCidMetadata(inputFiles, torrent)).stream()
     }], blockstore, {
       cidVersion: this.cidVersion,
       rawLeaves: this.rawLeaves,
@@ -318,10 +321,10 @@ export default class Ipfs extends HTMLElement {
    * @param {any} torrent
    * @returns {Promise<{cid: string, name: string | 'torrent', type: string | 'application/x-bittorrent', size?: number, offset?: number, length?: number}[]>}
    */
-  async createFileListMetadata (inputFiles, torrent) {
+  async createFileListCidMetadata (inputFiles, torrent) {
     // @ts-ignore
     const blockstore = new BlockstoreCore.MemoryBlockstore()
-    const filesMetadata = []
+    const filesCidMetadata = []
     await Promise.all(Ipfs.createFileListArray(inputFiles, torrent).map(async (file, i) => {
       // @ts-ignore
       for await (const result of IpfsUnixfsImporter.importer([file], blockstore, {
@@ -331,10 +334,10 @@ export default class Ipfs extends HTMLElement {
       })) {
         // importer emits directory entries too sometimes
         if (!result.path) continue
-        filesMetadata.push(Ipfs.createFileMetadata(inputFiles, torrent, result, i))
+        filesCidMetadata.push(Ipfs.createFileMetadata(inputFiles, torrent, result, i))
       }
     }))
-    return filesMetadata
+    return filesCidMetadata
   }
 
   /**
@@ -354,7 +357,9 @@ export default class Ipfs extends HTMLElement {
     )]).map(file => {
       return {
         path: file.name,
-        content: file.stream()
+        get content () {
+          return file.stream()
+        }
       }
     }) // passing file.stream() does not work, for that reason we wait for torrent on done and not torrent on stream to pass the files for seeding
   }
@@ -452,6 +457,36 @@ export default class Ipfs extends HTMLElement {
         ? {gateway: null, ignoreError}
         : this.getGateway(usage, true)
   }
+
+  // TODO: Error handling for all client.cat, client.add, etc.
+    /*
+    for await (const chunk of client.cat(cid, {
+      timeout: 10000
+    })) {
+      ...
+    }
+    */
+    // ----------------
+    // TODO: use abort controller array per client and clear all when client gets connected to an other ipfs service provider
+    /*
+    const controller = new AbortController()
+
+    try {
+      for await (const chunk of client.cat(cid, {
+        signal: controller.signal
+      })) {
+        text += decoder.decode(chunk, { stream: true })
+      }
+
+      text += decoder.decode()
+    } catch (err) {
+      if (controller.signal.aborted) {
+        console.log('Download cancelled')
+      } else {
+        console.error(err)
+      }
+    }
+    */
 
   /**
    * cat resp. download through ipfs client
