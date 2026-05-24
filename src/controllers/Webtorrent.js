@@ -226,7 +226,7 @@ export default class Webtorrent extends WebWorker() {
         torrentId = new Uint8Array(torrentContainer.torrentFile)
       } else if (cid) {
         // try to get the torrent through ipfs
-        torrentId = (await new Promise(resolve => this.dispatchEvent(new CustomEvent('ipfs-get-torrent-file', {
+        const torrentFile = (await new Promise(resolve => this.dispatchEvent(new CustomEvent('ipfs-get-torrent-file', {
           detail: {
             cid,
             resolve
@@ -235,6 +235,7 @@ export default class Webtorrent extends WebWorker() {
           cancelable: true,
           composed: true
         })))).torrentFile
+        if (torrentFile) torrentId = torrentFile
       }
       const torrent = client.add(torrentId, Object.assign(event.detail.opts || {}, await this.addOpts))
       /** @type {WEBTORRENT_ADD_SEED_RESULT} */
@@ -242,6 +243,7 @@ export default class Webtorrent extends WebWorker() {
       torrentMapResolve(result)
       // save to storage
       this.onReady(torrent, event.detail.uid, event.detail.room, cid)
+      // TODO: when torrent file done, then create and upload fileList.json even when download not yet finished
       // upload to ipfs || wait until done, on stream did not work so far
       if (cid) torrent.on('done', () => this.dispatchEvent(new CustomEvent('ipfs-seed', {
         detail: {
@@ -253,7 +255,7 @@ export default class Webtorrent extends WebWorker() {
       })))
       this.onError(torrent)
       this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, result, result.torrent, () => {
-        // inform ipfs about this cid to addWebSeed to the torrent
+        // inform ipfs about this cid to addWebSeed to the torrent when torrent.on 'infoHash'
         if (cid) this.dispatchEvent(new CustomEvent('ipfs-add-web-seed', {
           detail: {
             cid,

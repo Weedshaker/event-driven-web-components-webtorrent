@@ -102,13 +102,16 @@ export default class Ipfs extends HTMLElement {
     this.clientRpcVersion = `/api/v${this.cidVersion}`
 
     // torrent.addWebSeed from filesCidMetadata
+    // dispatched from controllers/Webtorrent.js when webtorrentAddEventListener => torrent.on 'infoHash'
     this.torrentAddWebSeed = event => {
       const addWebSeedFunc = async torrent => {
         try {
           // we avoid sending the torrent file metadata with the addWebSeed link
-          const filesCidMetadata = JSON.parse(await this.catCidToText(event.detail.cid)).filter(fileMetadata => fileMetadata.type !== 'application/x-bittorrent')
+          const fileListText = await this.catCidToText(event.detail.cid)
+          if (!fileListText) return null
+          const filesCidMetadata = JSON.parse(fileListText).filter(fileMetadata => fileMetadata.type !== 'application/x-bittorrent')
           // https://www.bittorrent.org/beps/bep_0019.html calls a single file .../webtorrent-web-seed/ and multiple .../webtorrent-web-seed/file1/file2
-          // also it delivers a range in the header, which can span multiple files, thats why we pass some torrent file data through the addWebSeed url to the service worker
+          // so we pass some torrent file data through the addWebSeed url to the service worker
           this.gateways.forEach(gateway => {
             if (!gateway.hasError && gateway.supports.includes('web-seed')) torrent.addWebSeed(`${gateway.origin}/ipfs/files-metadata/${encodeURIComponent(JSON.stringify(filesCidMetadata))}/webtorrent-web-seed/`)
           })
@@ -157,6 +160,7 @@ export default class Ipfs extends HTMLElement {
 
     // client.addAll
     this.ipfsSeedEventListener = event => {
+      // TODO: resolveWhenOnline
       const addAllFunc = async (inputFiles, torrent) => {
         let cidOne, cidTwo
         // returns the filesCidMetadata cid
@@ -399,46 +403,6 @@ export default class Ipfs extends HTMLElement {
   }
 
   /**
-   * client.cat file from ipfs
-   * 
-   * @param {string} cid
-   * @returns {Promise<string>}
-   */
-  async catCidToText (cid) {
-    const client = this.getGateway('cat').gateway?.client
-    const decoder = new TextDecoder()
-    let text = ''
-    // TODO: cat or fetch
-    for await (const chunk of client.cat(cid)) {
-      text += decoder.decode(chunk, { stream: true })
-    }
-    text += decoder.decode()
-    return text
-  }
-
-  async catCidToFile (cid, name, type) {
-    const client = this.getGateway('cat').gateway?.client
-    const chunks = []
-    // TODO: cat or fetch
-    for await (const chunk of client.cat(cid)) {
-      chunks.push(chunk)
-    }
-    return new File(
-      chunks,
-      name,
-      {
-        type: type
-      }
-    )
-  }
-
-  async getTorrentFile (cid) {
-    const json = JSON.parse(await this.catCidToText(cid))
-    const torrentFileEntry = json.find(entry => entry.type === 'application/x-bittorrent')
-    return this.catCidToFile(torrentFileEntry.cid, torrentFileEntry.name, torrentFileEntry.type)
-  }
-
-  /**
    * Create a KuboRpcClient
    * 
    * @param {'add'|'cat'|'web-seed'|'fetch'} usage
@@ -458,6 +422,55 @@ export default class Ipfs extends HTMLElement {
       : ignoreError
         ? {gateway: null, ignoreError}
         : this.getGateway(usage, true)
+  }
+
+  /**
+   * first get fileList.json then find torrent cid, download the torrent file and return
+   * 
+   * @param {string} cid
+   * @returns {Promise<File | null>}
+   */
+  async getTorrentFile (cid) {
+    const fileListText = await this.catCidToText(cid)
+    if (!fileListText) return null
+    const json = JSON.parse(fileListText)
+    const torrentFileEntry = json.find(entry => entry.type === 'application/x-bittorrent')
+    return torrentFileEntry?.cid ? this.catCidToFile(torrentFileEntry.cid, torrentFileEntry.name, torrentFileEntry.type) : null
+  }
+
+  /**
+   * client.cat file from ipfs to text
+   * 
+   * @param {string} cid
+   * @returns {Promise<string|null>}
+   */
+  async catCidToText (cid) {
+    // TODO: cat or fetch
+    const chunks = await this.cat(cid)
+    if (!chunks) return null
+    const decoder = new TextDecoder()
+    return chunks.reduce((text, chunk) => (text += decoder.decode(chunk, { stream: true })), '') + decoder.decode()
+  }
+
+  /**
+   * client.cat file from ipfs to file
+   * 
+   * @param {string} cid
+   * @param {string} name
+   * @param {string} type
+   * @returns {Promise<File | null>}
+   */
+  async catCidToFile (cid, name, type) {
+    // TODO: cat or fetch
+    const chunks = await this.cat(cid)
+    if (!chunks) return null
+    return new File(
+      chunks,
+      name,
+      {
+        type: type
+      }
+    )
   }
 
   // TODO: Error handling for all client.cat, client.add, etc.
