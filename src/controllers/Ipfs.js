@@ -19,9 +19,18 @@ import '../ipfs/ipfs-unixfs-importer@17.0.1/dist/index.min.js'
  */
 
 /**
+ * @typedef {{
+ *  cid: string,
+ *  name: string | 'torrent',
+ *  type: string | 'application/x-bittorrent',
+ *  size?: number,
+ *  offset?: number,
+ *  length?: number}
+ * } FILE_METADATA
+ */
+
+/**
  * https://github.com/ipfs/js-kubo-rpc-client/tree/main
- * // TODO: IPFS service provider choose by ping / https://ipfs.qzz.io/ type health check / ipfs hosted file with providers
- * // TODO: Error handling (CORS)
  *
  * @export
  * @return {CustomElementConstructor | *}
@@ -246,53 +255,9 @@ export default class Ipfs extends HTMLElement {
     const filesCidMetadata = []
     // upload files and collect metadata
     await Promise.all(Ipfs.createFileListArray(inputFiles, torrent).map(async (file, i) => {
-      try {
-        // TODO: abstract the client.add analog client.cat with resolveWhenOnline
-        filesCidMetadata.push(Ipfs.createFileMetadata(inputFiles, torrent, await client.add(file, {
-          pin: true,
-          cidVersion: this.cidVersion,
-          rawLeaves: this.rawLeaves,
-          wrapWithDirectory: false
-        }), i))
-      } catch (error) {
-        console.warn('Failed to add...', error, file)
-        // create the cid local when .add fails to at least get the file list json file
-        // @ts-ignore
-        for await (const result of IpfsUnixfsImporter.importer([file], blockstore, {
-          cidVersion: this.cidVersion,
-          rawLeaves: this.rawLeaves,
-          wrapWithDirectory: false
-        })) {
-          // importer emits directory entries too sometimes
-          if (!result.path) continue
-          filesCidMetadata.push(Ipfs.createFileMetadata(inputFiles, torrent, result, i))
-        }
-      }
+      filesCidMetadata.push(Ipfs.createFileMetadata(inputFiles, torrent, await this.add(file).result, i))
     }))
-    try {
-      return (await client.add(Ipfs.createFileListJsonFile(filesCidMetadata), {
-        pin: true,
-        cidVersion: this.cidVersion,
-        rawLeaves: this.rawLeaves,
-        wrapWithDirectory: false
-      })).cid.toString()
-    } catch (error) {
-      console.warn('Failed to add fileList.json', error, filesCidMetadata)
-      // TODO: resolveWhenOnline
-      let fileListCid = null
-      // @ts-ignore
-      for await (const result of IpfsUnixfsImporter.importer([{
-        path: 'fileList.json',
-        content: Ipfs.createFileListJsonFile(filesCidMetadata).stream()
-      }], blockstore, {
-        cidVersion: this.cidVersion,
-        rawLeaves: this.rawLeaves,
-        wrapWithDirectory: false
-      })) {
-        if (result.path === 'fileList.json') fileListCid = result.cid.toString()
-      }
-      return fileListCid
-    }
+    return (await this.add(Ipfs.createFileListJsonFile(filesCidMetadata)).result).cid.toString() 
   }
 
   /**
@@ -575,6 +540,65 @@ export default class Ipfs extends HTMLElement {
       }
     }
     return {response: this.resolveWhenOnline(func), getAbortController: () => abortController}
+  }
+
+  /**
+   * Description
+   * 
+   * @method
+   * @name add
+   * @kind method
+   * @memberof Ipfs
+   * @param {{path: string, content: ReadableStream}|File} file
+   * @returns {{result: Promise<{cid: string}>, getAbortController: () => AbortController}}
+   */
+  add (file) {
+    let abortController = new AbortController()
+    const func = async () => {
+      const createFileCid = async file => {
+        // create the cid local when .add fails to at least get the file list json file
+        // @ts-ignore
+        for await (const result of IpfsUnixfsImporter.importer([file], blockstore, {
+          cidVersion: this.cidVersion,
+          rawLeaves: this.rawLeaves,
+          wrapWithDirectory: false
+        })) {
+          // importer emits directory entries too sometimes
+          if (!result.path) continue
+          return result
+        }
+      }
+      const gatewayResult = this.getGateway('add')
+      if (gatewayResult.gateway?.client) {
+        const client = gatewayResult.gateway.client
+        try {
+          return await client.add(file, {
+            pin: true,
+            cidVersion: this.cidVersion,
+            rawLeaves: this.rawLeaves,
+            wrapWithDirectory: false
+          })
+        } catch (error) {
+          if (error.name === 'AbortError') {
+            return createFileCid(file)
+          } else {
+            gatewayResult.gateway.hasError = true
+            if (!gatewayResult.ignoreError) {
+              const addResult = this.add(file)
+              abortController = addResult.getAbortController()
+              return addResult.result
+            } else {
+              console.warn('Failed to add...', error, file)
+              return createFileCid(file)
+            }
+          }
+        }
+      } else {
+        console.warn('No more viable gateways...', this.gateways)
+        return createFileCid(file)
+      }
+    }
+    return {result: this.resolveWhenOnline(func), getAbortController: () => abortController}
   }
 
   /**
