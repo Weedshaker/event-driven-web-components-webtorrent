@@ -403,28 +403,6 @@ export default class Ipfs extends HTMLElement {
   }
 
   /**
-   * Create a KuboRpcClient
-   * 
-   * @param {'add'|'cat'|'web-seed'|'fetch'} usage
-   * @param {boolean} [ignoreError=false]
-   * @returns {{gateway: GATEWAY | null, ignoreError: boolean}}
-   */
-  getGateway (usage, ignoreError = false) {
-    const gateway = this.gateways.find(gateway => {
-      if (!ignoreError && gateway.hasError) return false
-      if (!gateway.supports.includes(usage)) return false
-      // @ts-ignore
-      if (!gateway.client) gateway.client = KuboRpcClient.create({url: `${gateway.origin}${this.clientRpcVersion}`})
-      return true
-    })
-    return gateway
-      ? {gateway, ignoreError}
-      : ignoreError
-        ? {gateway: null, ignoreError}
-        : this.getGateway(usage, true)
-  }
-
-  /**
    * first get fileList.json then find torrent cid, download the torrent file and return
    * 
    * @param {string} cid
@@ -444,12 +422,38 @@ export default class Ipfs extends HTMLElement {
    * @param {string} cid
    * @returns {Promise<string|null>}
    */
-  async catCidToText (cid) {
-    // TODO: cat or fetch
-    const chunks = await this.cat(cid)
-    if (!chunks) return null
-    const decoder = new TextDecoder()
-    return chunks.reduce((text, chunk) => (text += decoder.decode(chunk, { stream: true })), '') + decoder.decode()
+  catCidToText (cid) {
+    const decodeText = chunks => {
+      const decoder = new TextDecoder()
+      return chunks.reduce((text, chunk) => (text += decoder.decode(chunk, { stream: true })), '') + decoder.decode()
+    }
+    return new Promise(resolve => {
+      let counter = 0
+      let didResolve = false
+      const doResolve = response => {
+        counter++
+        if (!didResolve) {
+          didResolve = true
+          if (response) {
+            resolve(response)
+          } else if (counter >= 2) { // two which race, when none resulted in any useful response, resolve with null
+            resolve(response)
+          }
+        }
+      }
+      let {chunks: catChunksPromise, getAbortController: catGetAbortController} = this.cat(cid)
+      let {response: fetchResponsePromise, getAbortController: fetchGetAbortController} = this.fetch(cid)
+      catChunksPromise.then(chunks => {
+        if (!chunks) return doResolve(null)
+        fetchGetAbortController().abort()
+        doResolve(decodeText(chunks))
+      })
+      fetchResponsePromise.then(response => {
+        if (!response) return doResolve(null)
+        catGetAbortController().abort()
+        doResolve(response.text())
+      })
+    })
   }
 
   /**
@@ -461,72 +465,74 @@ export default class Ipfs extends HTMLElement {
    * @returns {Promise<File | null>}
    */
   async catCidToFile (cid, name, type) {
-    // TODO: cat or fetch
-    const chunks = await this.cat(cid)
-    if (!chunks) return null
-    return new File(
+    const getFile = (chunks, name, type) => new File(
+      // @ts-ignore
       chunks,
       name,
       {
         type: type
       }
     )
+    return new Promise(resolve => {
+      let counter = 0
+      let didResolve = false
+      const doResolve = response => {
+        counter++
+        if (!didResolve) {
+          didResolve = true
+          if (response) {
+            resolve(response)
+          } else if (counter >= 2) { // two which race, when none resulted in any useful response, resolve with null
+            resolve(response)
+          }
+        }
+      }
+      let {chunks: catChunksPromise, getAbortController: catGetAbortController} = this.cat(cid)
+      let {response: fetchResponsePromise, getAbortController: fetchGetAbortController} = this.fetch(cid)
+      catChunksPromise.then(chunks => {
+        if (!chunks) return doResolve(null)
+        fetchGetAbortController().abort()
+        doResolve(getFile(chunks, name, type))
+      })
+      fetchResponsePromise.then(async response => {
+        if (!response) return doResolve(null)
+        catGetAbortController().abort()
+        doResolve(getFile([await response.blob()], name, type))
+      })
+    })
   }
-
-  // TODO: Error handling for all client.cat, client.add, etc.
-    /*
-    for await (const chunk of client.cat(cid, {
-      timeout: 10000
-    })) {
-      ...
-    }
-    */
-    // ----------------
-    // TODO: use abort controller array per client and clear all when client gets connected to an other ipfs service provider
-    /*
-    const controller = new AbortController()
-
-    try {
-      for await (const chunk of client.cat(cid, {
-        signal: controller.signal
-      })) {
-        text += decoder.decode(chunk, { stream: true })
-      }
-
-      text += decoder.decode()
-    } catch (err) {
-      if (controller.signal.aborted) {
-        console.log('Download cancelled')
-      } else {
-        console.error(err)
-      }
-    }
-    */
 
   /**
    * cat resp. download through ipfs client
    * 
    * @param {string} cid
-   * @returns {Promise<any[]|null>}
+   * @returns {{chunks: Promise<any[]|null>, getAbortController: () => AbortController}}
    */
   cat (cid) {
+    let abortController = new AbortController()
     const func = async () => {
       const gatewayResult = this.getGateway('cat')
       if (gatewayResult.gateway?.client) {
         const client = gatewayResult.gateway.client
         try {
           const chunks = []
-          for await (const chunk of client.cat(cid)) {
+          for await (const chunk of client.cat(cid, {signal: abortController.signal})) {
             chunks.push(chunk)
           }
           gatewayResult.gateway.hasError = false
           return chunks
         } catch (error) {
-          gatewayResult.gateway.hasError = true
-          if (!gatewayResult.ignoreError) {
-            return this.cat(cid)
-          } else {
+          if (error.name === 'AbortError') {
             return null
+          } else {
+            gatewayResult.gateway.hasError = true
+            if (!gatewayResult.ignoreError) {
+              const catResult = this.cat(cid)
+              abortController = catResult.getAbortController()
+              return catResult.chunks
+            } else {
+              return null
+            }
           }
         }
       } else {
@@ -534,7 +540,64 @@ export default class Ipfs extends HTMLElement {
         return null
       }
     }
-    return this.resolveWhenOnline(func)
+    return {chunks: this.resolveWhenOnline(func), getAbortController: () => abortController}
+  }
+
+  /**
+   * fetch resp. download through ipfs client
+   * 
+   * @param {string} cid
+   * @returns {{response: Promise<Response|null>, getAbortController: () => AbortController}}
+   */
+  fetch (cid) {
+    let abortController = new AbortController()
+    const func = () => {
+      const gatewayResult = this.getGateway('fetch')
+      if (gatewayResult.gateway) {
+        return fetch(`${gatewayResult.gateway.origin}/ipfs/${cid}`, {signal: abortController.signal}).then(response => {
+          // @ts-ignore
+          gatewayResult.gateway.hasError = false
+          return response
+        }).catch(error => {
+          // @ts-ignore
+          gatewayResult.gateway.hasError = true
+          if (!gatewayResult.ignoreError) {
+            const fetchResult = this.fetch(cid)
+            abortController = fetchResult.getAbortController()
+            return fetchResult.response
+          } else {
+            return null
+          }
+        })
+      } else {
+        console.warn('No more viable gateways...', this.gateways)
+        return Promise.resolve(null)
+      }
+    }
+    return {response: this.resolveWhenOnline(func), getAbortController: () => abortController}
+  }
+
+  /**
+   * Create a KuboRpcClient
+   * 
+   * @param {'add'|'cat'|'web-seed'|'fetch'} usage
+   * @param {boolean} [ignoreError=false]
+   * @returns {{gateway: GATEWAY | null, ignoreError: boolean}}
+   */
+  getGateway (usage, ignoreError = false) {
+    const gateway = this.gateways.find(gateway => {
+      if (!ignoreError && gateway.hasError) return false
+      if (!gateway.supports.includes(usage)) return false
+      // KuboRpcClient is only used for add and cat
+      // @ts-ignore
+      if (!gateway.client && ['add', 'cat'].includes(usage)) gateway.client = KuboRpcClient.create({url: `${gateway.origin}${this.clientRpcVersion}`})
+      return true
+    })
+    return gateway
+      ? {gateway, ignoreError}
+      : ignoreError
+        ? {gateway: null, ignoreError}
+        : this.getGateway(usage, true)
   }
 
   /**
