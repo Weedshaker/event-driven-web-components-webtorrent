@@ -318,6 +318,7 @@ export default class Webtorrent extends WebWorker() {
       if (!event.detail.torrent.done) {
         const torrentContainer = event.detail || await Webtorrent.#torrentFileMap.get(event.detail.torrent.infoHash)
         console.log('****webtorrentIsStalledEventListener*****', event.detail.torrent.infoHash, torrentContainer)
+        // TODO:
         // test by commenting out the line 238: //if (torrentFile) torrentId = torrentFile
         /*if (torrentContainer?.cid) this.dispatchEvent(new CustomEvent('ipfs-cat', {
           detail: {

@@ -185,7 +185,6 @@ export default class Ipfs extends HTMLElement {
 
     // client.addAll
     this.ipfsSeedEventListener = event => {
-      // TODO: resolveWhenOnline
       const addAllFunc = async (inputFiles, torrent) => {
         let cidOne, cidTwo
         // returns the filesCidMetadata cid
@@ -203,9 +202,7 @@ export default class Ipfs extends HTMLElement {
 
     this.ipfsGetTorrentFileEventListener = async event => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}torrent-file`, {cid: event.detail.cid, torrentFile: await this.getTorrentFile(event.detail.cid)})
 
-    this.onlineEventListener = event => {
-      this.gateways.forEach(gateway => (gateway.hasError = false))
-    }
+    this.onlineEventListener = event => this.gateways.forEach(gateway => (gateway.hasError = false))
   }
 
   connectedCallback () {
