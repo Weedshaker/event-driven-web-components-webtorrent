@@ -243,7 +243,6 @@ export default class Webtorrent extends WebWorker() {
       torrentMapResolve(result)
       // save to storage
       this.onReady(torrent, event.detail.uid, event.detail.room, cid)
-      // TODO: when torrent file done, then create and upload fileList.json even when download not yet finished
       // upload to ipfs || wait until done, on stream did not work so far
       if (cid) torrent.on('done', () => this.dispatchEvent(new CustomEvent('ipfs-seed', {
         detail: {
@@ -319,6 +318,7 @@ export default class Webtorrent extends WebWorker() {
       if (!event.detail.torrent.done) {
         const torrentContainer = event.detail || await Webtorrent.#torrentFileMap.get(event.detail.torrent.infoHash)
         console.log('****webtorrentIsStalledEventListener*****', event.detail.torrent.infoHash, torrentContainer)
+        // test by commenting out the line 238: //if (torrentFile) torrentId = torrentFile
         /*if (torrentContainer?.cid) this.dispatchEvent(new CustomEvent('ipfs-cat', {
           detail: {
             cid: torrentContainer.cid,

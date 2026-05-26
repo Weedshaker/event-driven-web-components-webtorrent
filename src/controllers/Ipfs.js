@@ -112,24 +112,40 @@ export default class Ipfs extends HTMLElement {
 
     // torrent.addWebSeed from filesCidMetadata
     // dispatched from controllers/Webtorrent.js when webtorrentAddEventListener => torrent.on 'infoHash'
-    this.torrentAddWebSeed = event => {
-      const addWebSeedFunc = async torrent => {
+    this.torrentAddWebSeed = async event => {
+      const filterFileMetadata = fileListText => {
         try {
+          const fileMetadata = typeof fileListText === 'string' ? JSON.parse(fileListText) : fileListText
           // we avoid sending the torrent file metadata with the addWebSeed link
-          const fileListText = await this.catCidToText(event.detail.cid)
-          if (!fileListText) return null
-          const filesCidMetadata = JSON.parse(fileListText).filter(fileMetadata => fileMetadata.type !== 'application/x-bittorrent')
-          // https://www.bittorrent.org/beps/bep_0019.html calls a single file .../webtorrent-web-seed/ and multiple .../webtorrent-web-seed/file1/file2
-          // so we pass some torrent file data through the addWebSeed url to the service worker
-          this.gateways.forEach(gateway => {
-            if (!gateway.hasError && gateway.supports.includes('web-seed')) torrent.addWebSeed(`${gateway.origin}/ipfs/files-metadata/${encodeURIComponent(JSON.stringify(filesCidMetadata))}/webtorrent-web-seed/`)
-          })
+          return fileMetadata.filter(fileMetadata => fileMetadata.type !== 'application/x-bittorrent')
         } catch (error) {
           console.warn('IPFS addWebSeed filesCidMetadata error!', error)
+          return null
         }
       }
-      // wait for torrent to be ready, that we can read offset and length
-      addWebSeedFunc(event.detail.torrent)
+      const addWebSeedFunc = (torrent, filesCidMetadata) => {
+        // https://www.bittorrent.org/beps/bep_0019.html calls a single file .../webtorrent-web-seed/ and multiple .../webtorrent-web-seed/file1/file2
+        // so we pass some torrent file data through the addWebSeed url to the service worker
+        this.gateways.forEach(gateway => {
+          if (!gateway.hasError && gateway.supports.includes('web-seed')) torrent.addWebSeed(`${gateway.origin}/ipfs/files-metadata/${encodeURIComponent(JSON.stringify(filesCidMetadata))}/webtorrent-web-seed/`)
+        })
+      }
+      // cat/fetch the filesMetadata from IPFS
+      const fileListText = await this.catCidToText(event.detail.cid)
+      let filesCidMetadata
+      if (fileListText && (filesCidMetadata = filterFileMetadata(fileListText))) {
+        addWebSeedFunc(event.detail.torrent, filesCidMetadata)
+      } else {
+        // wait for torrent to be ready, that we can read all files data to create the fileMetadata from scratch
+        const doOnMetadata = async () => {
+          const filesCidMetadata = await this.createFileListCidMetadata(event.detail.torrent.files, event.detail.torrent)
+          addWebSeedFunc(event.detail.torrent, filterFileMetadata(filesCidMetadata))
+          // add the filesCidMetadata to IPFS
+          this.add(Ipfs.createFileListJsonFile(filesCidMetadata))
+        }
+        if (event.detail.torrent.metadata) return doOnMetadata()
+        return event.detail.torrent.on('metadata', doOnMetadata)
+      }
     }
 
     //TODO: recover torrent with cat to seed when stalled
