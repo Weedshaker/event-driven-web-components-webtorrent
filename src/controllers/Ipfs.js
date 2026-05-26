@@ -148,39 +148,11 @@ export default class Ipfs extends HTMLElement {
       }
     }
 
-    //TODO: recover torrent with cat to seed when stalled
     // client.cat
-    this.ipfsCatEventListener = event => {
-      if (!event.detail.cid) return
-      Promise.all(event.detail.torrent.files.map(async file => {
-        const client = this.getGateway('cat').gateway?.client
-        const chunks = []
-        // TODO: cat or fetch
-        for await (const chunk of client.cat(`${event.detail.cid}/${file.name}`)) {
-          chunks.push(chunk)
-        }
-        return new File(
-          chunks,
-          file.name,
-          {
-            type: file.type,
-            lastModified: file.lastModified
-          }
-        )
-      })).then(files => {
-        console.log('*********', 'added from ipfs', files)
-        this.dispatchEvent(new CustomEvent('webtorrent-seed', {
-          detail: {
-            uid: event.detail.uid,
-            room: event.detail.room,
-            cid: event.detail.cid,
-            input: files,
-          },
-          bubbles: true,
-          cancelable: true,
-          composed: true
-        }))
-      })
+    this.ipfsCatEventListener = async event => {
+      const fileListText = await this.catCidToText(event.detail.cid)
+      if (!fileListText) return null
+      this.respond(event.detail.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}catted`, {files: await Promise.all(JSON.parse(fileListText).filter(entry => entry.type !== 'application/x-bittorrent').map(entry => this.catCidToFile(entry.cid, entry.name, entry.type)))})
     }
 
     // client.addAll
@@ -457,11 +429,12 @@ export default class Ipfs extends HTMLElement {
       const doResolve = response => {
         counter++
         if (!didResolve) {
-          didResolve = true
           if (response) {
             resolve(response)
+            didResolve = true
           } else if (counter >= 2) { // two which race, when none resulted in any useful response, resolve with null
             resolve(response)
+            didResolve = true
           }
         }
       }

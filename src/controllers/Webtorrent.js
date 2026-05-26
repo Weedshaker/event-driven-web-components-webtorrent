@@ -22,7 +22,10 @@ import { WebWorker } from '../event-driven-web-components-prototypes/src/WebWork
 /**
  * @typedef {{
  *  torrent,
- *  streamToServerReadyPromise: Promise<ServiceWorkerRegistration> & {done: boolean}
+ *  streamToServerReadyPromise: Promise<ServiceWorkerRegistration> & {done: boolean},
+ *  uid?: string,
+ *  room?: string,
+ *  cid?: string|null,
  * }} WEBTORRENT_ADD_SEED_RESULT
  */
 
@@ -239,7 +242,7 @@ export default class Webtorrent extends WebWorker() {
       }
       const torrent = client.add(torrentId, Object.assign(event.detail.opts || {}, await this.addOpts))
       /** @type {WEBTORRENT_ADD_SEED_RESULT} */
-      const result = {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise}
+      const result = {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise, uid: event.detail.uid, room: event.detail.room, cid}
       torrentMapResolve(result)
       // save to storage
       this.onReady(torrent, event.detail.uid, event.detail.room, cid)
@@ -283,7 +286,7 @@ export default class Webtorrent extends WebWorker() {
         ? client.add(input[0], Object.assign(opts || {}, await this.addOpts))
         : client.seed(input, Object.assign(opts || {}, await this.addOpts))
       let torrent = await addOrSeedFunc(input, event.detail.opts)
-      this.onInfoHash(torrent)
+      this.onInfoHash(torrent, event.detail.uid, event.detail.room, event.detail.cid)
       // save to storage
       this.onReady(torrent, event.detail.uid, event.detail.room, event.detail.cid, true)
       this.onError(torrent)
@@ -300,7 +303,7 @@ export default class Webtorrent extends WebWorker() {
             } else {
               await Webtorrent.destroyTorrent(existingTorrent, existingTorrent.infoHash.toLowerCase())
               torrent = await addOrSeedFunc(input, event.detail.opts)
-              this.onInfoHash(torrent)
+              this.onInfoHash(torrent, event.detail.uid, event.detail.room, event.detail.cid)
               // save to storage
               this.onReady(torrent, event.detail.uid, event.detail.room, event.detail.cid, true)
               this.onError(torrent)
@@ -315,22 +318,29 @@ export default class Webtorrent extends WebWorker() {
     this.webtorrentResetEventListener = event => this.reset()
 
     this.webtorrentIsStalledEventListener = async event => {
-      if (!event.detail.torrent.done) {
-        const torrentContainer = event.detail || await Webtorrent.#torrentFileMap.get(event.detail.torrent.infoHash)
-        console.log('****webtorrentIsStalledEventListener*****', event.detail.torrent.infoHash, torrentContainer)
-        // TODO:
-        // test by commenting out the line 238: //if (torrentFile) torrentId = torrentFile
-        /*if (torrentContainer?.cid) this.dispatchEvent(new CustomEvent('ipfs-cat', {
+      let torrentContainer
+      if (!event.detail.torrent.done && (torrentContainer = (await Webtorrent.#torrentMap.get(event.detail.torrent.infoHash)))) {
+        if (torrentContainer.cid) new Promise(resolve => this.dispatchEvent(new CustomEvent('ipfs-cat', {
           detail: {
-            cid: torrentContainer.cid,
-            torrent: event.detail.torrent,
+            torrent: torrentContainer.torrent || event.detail.torrent,
+            uid: event.detail.uid || torrentContainer.uid,
             room: torrentContainer.room,
-            uid: event.detail.uid || torrentContainer.added[0]?.uid
+            cid: torrentContainer.cid,
+            resolve
           },
           bubbles: true,
           cancelable: true,
           composed: true
-        }))*/
+        }))).then(result => {
+          if (Array.isArray(result.files) && result.files.length) this.webtorrentSeedEventListener({
+            detail: {
+              input: result.files,
+              uid: event.detail.uid || torrentContainer.uid,
+              room: torrentContainer.room,
+              cid: torrentContainer.cid
+            }
+          })
+        })
       }
     }
     
@@ -479,8 +489,8 @@ export default class Webtorrent extends WebWorker() {
     this.clientPromise.finally(() => (this.clientPromise.done = true))
   }
 
-  onInfoHash (torrent) {
-    torrent.on('infoHash', () => Webtorrent.#torrentMap.set(torrent.infoHash.toLowerCase(), Promise.resolve({torrent, streamToServerReadyPromise: this.streamToServerReadyPromise})))
+  onInfoHash (torrent, uid, room, cid) {
+    torrent.on('infoHash', () => Webtorrent.#torrentMap.set(torrent.infoHash.toLowerCase(), Promise.resolve({torrent, streamToServerReadyPromise: this.streamToServerReadyPromise, uid, room, cid})))
   }
 
   onReady (torrent, uid, room, cid, self) {
