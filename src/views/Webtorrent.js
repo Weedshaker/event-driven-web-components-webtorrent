@@ -74,6 +74,7 @@ export default class Webtorrent extends Intersection() {
       event.preventDefault()
       event.stopPropagation()
       this.torrentErrorEventListener(event)
+      // TODO: 3rd time reset client
     }
 
     // this updates the min-height on resize, see updateHeight function for more info
@@ -324,7 +325,6 @@ export default class Webtorrent extends Intersection() {
               composed: true
             }))
             activityFunc()
-            return // this.renderTorrent(true) // TODO: figure what to do at this point, may ipfs resets the torrent anyway with new seed, test this with gateway which can not fetch nor web-seed, that this falls back to cat
           }
           if (torrent.metadata) progressElement.setAttribute('value', 100 * torrent.progress)
           this.progressText.textContent = `${(100 * torrent.progress).toFixed(1)}%`
@@ -350,15 +350,15 @@ export default class Webtorrent extends Intersection() {
           this.details.addEventListener('toggle', this.detailsToggleEventListener)
         }, 200)
       }
-      const renderFiles = () => {
+      const renderFiles = async () => {
         let file
         if ((file = torrent.files.find(file => file.name === this.getAttribute('file-name')))) {
-          this.webtorrentTargetElements.push(Webtorrent.renderFileTo(file, this, this.summary, streamToServerReadyPromise, undefined, streamOrDoneFunc, tagName))
+          this.webtorrentTargetElements.push(await Webtorrent.renderFileTo(file, this, this.summary, streamToServerReadyPromise, undefined, streamOrDoneFunc, this.getAttribute('torrent-id'), this, tagName))
         } else {
-          this.webtorrentTargetElements = this.webtorrentTargetElements.concat(Webtorrent.renderFilesTo(torrent, this, this.summary, streamToServerReadyPromise, tagName, streamOrDoneFunc))
+          this.webtorrentTargetElements = this.webtorrentTargetElements.concat(await Webtorrent.renderFilesTo(torrent, this, this.summary, streamToServerReadyPromise, this.getAttribute('torrent-id'), this, tagName, streamOrDoneFunc))
         }
         this.webtorrentTargetElements.forEach(({renderTarget}) => {
-          renderTarget.addEventListener('load', event => {
+          renderTarget.addEventListener(['audio', 'video'].includes(renderTarget.tagName.toLowerCase()) ? 'loadeddata' : 'load', event => {
             this.updateHeight()
             this.removeAttribute('updating')
             if (keepScroll) this.dispatchEvent(new CustomEvent(`${this.namespace}load`, {
@@ -384,8 +384,8 @@ export default class Webtorrent extends Intersection() {
     })
   }
 
-  static renderFilesTo (torrent, webComponent, targetContainer, streamToServerReadyPromise, tagName, streamOrDoneFunc) {
-    const results = torrent.files.map((file, i) => Webtorrent.renderFileTo(file, webComponent, targetContainer, streamToServerReadyPromise, i, streamOrDoneFunc, tagName, false))
+  static async renderFilesTo (torrent, webComponent, targetContainer, streamToServerReadyPromise, torrentId, thisNode, tagName, streamOrDoneFunc) {
+    const results = await Promise.all(torrent.files.map(async (file, i) => await Webtorrent.renderFileTo(file, webComponent, targetContainer, streamToServerReadyPromise, i, streamOrDoneFunc, torrentId, thisNode, tagName, false)))
     const videoResults = results.filter(result => result.tagName === 'video')
     if (videoResults.length === 1) {
       targetContainer.prepend(videoResults[0].appendTarget)
@@ -416,7 +416,7 @@ export default class Webtorrent extends Intersection() {
     return results
   }
 
-  static renderFileTo (file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, streamOrDoneFunc, tagName = '', append = true) {
+  static async renderFileTo (file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, streamOrDoneFunc, torrentId, thisNode, tagName = '', append = true) {
     // streamTo and streamURL only work when service worker is up and running
     const setHref = target => {
       if (streamToServerReadyPromise.done && !/OS 16_/.test(navigator.userAgent)) {
@@ -444,123 +444,157 @@ export default class Webtorrent extends Intersection() {
       a.textContent = file.name
       renderTarget.prepend(a)
       if (streamToServerReadyPromise.done && tagName !== 'embed' && tagName !== 'iframe') {
-        // TODO: wormhole-crypto decryptStream() file.streamURL / NOTE: streamTo (elem) {elem.src = this.streamURL...}
-        /*
-        file.on('stream', async ({ stream }, cb) => {
+        // TODO: decrypt for any type, not only streamTo
+        //try {
+          console.log('****torrentIdUrl*****', torrentId)
+          const torrentIdUrl = new URL(torrentId)
+          let keyEpoch, iv
+          if ((keyEpoch = torrentIdUrl.searchParams.get('key-epoch')) && (iv = torrentIdUrl.searchParams.get('iv'))) {
+            const keyContainer = await new Promise(resolve => thisNode.dispatchEvent(new CustomEvent('yjs-get-key', {
+              detail: {
+                epoch: keyEpoch,
+                resolve
+              },
+              bubbles: true,
+              cancelable: true,
+              composed: true
+            })))
+            if (keyContainer) {
+              const { decrypted } = await new Promise(async resolve => thisNode.dispatchEvent(new CustomEvent('yjs-decrypt', {
+                detail: {
+                  resolve,
+                  encrypted: {
+                    text: file.stream(),
+                    iv: new Uint8Array(iv.split(',')),
+                    name: 'wormhole-crypto',
+                    key: keyContainer.key.epoch
+                  },
+                  key: keyContainer
+                },
+                bubbles: true,
+                cancelable: true,
+                composed: true
+              })))
+              // TODO: solve the whole streamingTo etc. when encrypted here with OPFS
+              /*
+              // 2. decrypt stream (wormhole-crypto)
+              const decryptedStream =
+                await keychain.decryptStream(encryptedStream)
 
-        const reader = stream.getReader()
+              // 3. create video + MediaSource
+              const video = document.createElement('video')
+              video.controls = true
+              document.body.appendChild(video)
 
-        // Read first chunk
-        const first = await reader.read()
+              const mediaSource = new MediaSource()
+              video.src = URL.createObjectURL(mediaSource)
 
-        if (first.done) {
-          return cb(new Error('Empty stream'))
-        }
+              // 4. MIME type MUST match your video
+              const mime = 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"'
 
-        const chunk = first.value
+              mediaSource.addEventListener('sourceopen', async () => {
+                const sourceBuffer = mediaSource.addSourceBuffer(mime)
 
-        // Decode small beginning
-        const text = new TextDecoder().decode(
-          chunk.slice(0, 64)
-        )
+                const reader = decryptedStream.getReader()
 
-        // Detect encryption marker
-        if (!text.startsWith('WH01:')) {
+                let queue = []
 
-          // Not encrypted
-          const passthrough = new ReadableStream({
-            start(controller) {
-              controller.enqueue(chunk)
+                let updating = false
 
-              async function pump() {
-                while (true) {
-                  const { done, value } =
-                    await reader.read()
+                function pumpQueue() {
+                  if (updating || queue.length === 0) return
 
-                  if (done) break
+                  updating = true
+                  const chunk = queue.shift()
 
-                  controller.enqueue(value)
+                  sourceBuffer.appendBuffer(chunk)
                 }
 
-                controller.close()
-              }
+                sourceBuffer.addEventListener('updateend', () => {
+                  updating = false
 
-              pump()
-            }
-          })
+                  if (queue.length === 0 && doneReading) {
+                    mediaSource.endOfStream()
+                    return
+                  }
 
-          return cb(null, passthrough)
-        }
+                  pumpQueue()
+                })
 
-        // Parse header
-        const end = text.indexOf(':', 5)
+                let doneReading = false
 
-        const keyId = text.slice(5, end)
+                async function readLoop() {
+                  while (true) {
+                    const { value, done } = await reader.read()
 
-        console.log('Encrypted stream:', keyId)
+                    if (done) {
+                      doneReading = true
+                      pumpQueue()
+                      return
+                    }
 
-        // Find where encrypted payload begins
-        const payloadStart = end + 1
-
-        // Rebuild stream WITHOUT plaintext header
-        const encryptedPayloadStream =
-          new ReadableStream({
-
-            start(controller) {
-
-              // Push remaining bytes from first chunk
-              controller.enqueue(
-                chunk.slice(payloadStart)
-              )
-
-              async function pump() {
-
-                while (true) {
-                  const { done, value } =
-                    await reader.read()
-
-                  if (done) break
-
-                  controller.enqueue(value)
+                    queue.push(value)
+                    pumpQueue()
+                  }
                 }
 
-                controller.close()
+                readLoop()
+              })
+                */
+              /*
+              // 2. decrypt stream (no Blob involved)
+              const plaintextStream =
+                await keychain.decryptStream(encryptedStream)
+
+              // 3. OPFS
+              const root = await navigator.storage.getDirectory()
+
+              const tempName = crypto.randomUUID() + '.img'
+
+              const handle = await root.getFileHandle(tempName, {
+                create: true
+              })
+
+              const writable = await handle.createWritable()
+
+              // 4. stream directly into OPFS (NO memory spike)
+              await plaintextStream.pipeTo(writable)
+
+              // 5. reopen as File (snapshot from disk)
+              const imgFile = await handle.getFile()
+
+              // 6. show in DOM
+              const url = URL.createObjectURL(imgFile)
+
+              const img = document.createElement('img')
+              img.src = url
+              document.body.appendChild(img)
+              */
+              /*
+              img.onload = async () => {
+                URL.revokeObjectURL(url)
+
+                try {
+                  await root.removeEntry(tempName)
+                } catch (e) {
+                  console.warn('OPFS cleanup failed', e)
+                }
               }
-
-              pump()
+              */
+              //if (decrypted.error) return TODO...
+              console.log('*********', decrypted)
+              renderTarget.src = URL.createObjectURL(await new Response(decrypted.text).blob())
+            } else {
+              file.streamTo(renderTarget)
             }
-          })
-
-        // Decrypt stream
-        const decryptedStream =
-          await keychain.decryptStream(
-            encryptedPayloadStream
-          )
-
-        cb(null, decryptedStream)
-      })
-        */
-       /*
-       async function readHeader(stream) {
-      const reader = stream.getReader()
-
-      let buffer = new Uint8Array()
-
-      while (buffer.length < HEADER_SIZE) {
-        const { value, done } = await reader.read()
-        if (done) throw new Error("Unexpected EOF")
-
-        buffer = concat(buffer, value)
-      }
-
-      const header = buffer.slice(0, HEADER_SIZE)
-      const rest = buffer.slice(HEADER_SIZE)
-
-      return { header, rest, reader }
-    }
-      */
-        // or file.on('stream', function ({ stream, file, req }, function pipeCallback) {})
-        file.streamTo(renderTarget)
+          } else {
+            // or file.on('stream', function ({ stream, file, req }, function pipeCallback) {})
+            file.streamTo(renderTarget)
+          }
+        //} catch (error) {
+          // or file.on('stream', function ({ stream, file, req }, function pipeCallback) {})
+          //file.streamTo(renderTarget)
+        //}
       } else {
         file.blob().then(blob => renderTarget.setAttribute(targetAttribute || 'src', URL.createObjectURL(blob)))
       }
