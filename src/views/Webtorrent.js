@@ -444,160 +444,69 @@ export default class Webtorrent extends Intersection() {
       a.textContent = file.name
       renderTarget.prepend(a)
       if (streamToServerReadyPromise.done && tagName !== 'embed' && tagName !== 'iframe') {
-        // TODO: decrypt for any type, not only streamTo
-        //try {
-          console.log('****torrentIdUrl*****', torrentId)
-          const torrentIdUrl = new URL(torrentId)
-          let keyEpoch, iv
-          if ((keyEpoch = torrentIdUrl.searchParams.get('key-epoch')) && (iv = torrentIdUrl.searchParams.get('iv'))) {
-            const keyContainer = await new Promise(resolve => thisNode.dispatchEvent(new CustomEvent('yjs-get-key', {
-              detail: {
-                epoch: keyEpoch,
-                resolve
-              },
-              bubbles: true,
-              cancelable: true,
-              composed: true
-            })))
-            if (keyContainer) {
-              const { decrypted } = await new Promise(async resolve => thisNode.dispatchEvent(new CustomEvent('yjs-decrypt', {
+        file.streamTo(renderTarget)
+      } else {
+        file.blob().then(blob => renderTarget.setAttribute(targetAttribute || 'src', URL.createObjectURL(blob)))
+      }
+    }
+    // check if file is encrypted and if so, get the ReadableStream of stream decrypt
+    const torrentIdUrl = new URL(torrentId)
+    let keyEpoch, iv
+    if ((keyEpoch = torrentIdUrl.searchParams.get('key-epoch')) && (iv = torrentIdUrl.searchParams.get('iv'))) {
+      new Promise(resolve => thisNode.dispatchEvent(new CustomEvent('yjs-get-key', {
+        detail: {
+          epoch: keyEpoch,
+          resolve
+        },
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      }))).then(keyContainer => {
+        if (keyContainer) {
+          file.on('iterator', ({ iterator, file, req }, cb) => {
+            // decrypt on each iteration the requested chunks
+            cb((async function* () {
+              const [, start, end] = (/bytes=(\d+)-(\d*)/.exec(req?.headers?.range) || []).map(num => Number(num))
+              const decryptedStream = await new Promise(async resolve => thisNode.dispatchEvent(new CustomEvent('yjs-decrypt', {
                 detail: {
                   resolve,
                   encrypted: {
-                    text: file.stream(),
+                    text: file,
                     iv: new Uint8Array(iv.split(',')),
                     name: 'wormhole-crypto',
-                    key: keyContainer.key.epoch
+                    key: keyContainer.key.epoch,
+                    start,
+                    length: end ? end - start + 1 : file.length - 1,
+                    fileLength: file.length
                   },
                   key: keyContainer
                 },
                 bubbles: true,
                 cancelable: true,
                 composed: true
-              })))
-              // TODO: solve the whole streamingTo etc. when encrypted here with OPFS
-              /*
-              // 2. decrypt stream (wormhole-crypto)
-              const decryptedStream =
-                await keychain.decryptStream(encryptedStream)
-
-              // 3. create video + MediaSource
-              const video = document.createElement('video')
-              video.controls = true
-              document.body.appendChild(video)
-
-              const mediaSource = new MediaSource()
-              video.src = URL.createObjectURL(mediaSource)
-
-              // 4. MIME type MUST match your video
-              const mime = 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"'
-
-              mediaSource.addEventListener('sourceopen', async () => {
-                const sourceBuffer = mediaSource.addSourceBuffer(mime)
-
-                const reader = decryptedStream.getReader()
-
-                let queue = []
-
-                let updating = false
-
-                function pumpQueue() {
-                  if (updating || queue.length === 0) return
-
-                  updating = true
-                  const chunk = queue.shift()
-
-                  sourceBuffer.appendBuffer(chunk)
+              }))).then(result => {
+                if (result) {
+                  const { decrypted } = result
+                  if (decrypted.error) return null
+                  return decrypted.text
                 }
-
-                sourceBuffer.addEventListener('updateend', () => {
-                  updating = false
-
-                  if (queue.length === 0 && doneReading) {
-                    mediaSource.endOfStream()
-                    return
-                  }
-
-                  pumpQueue()
-                })
-
-                let doneReading = false
-
-                async function readLoop() {
-                  while (true) {
-                    const { value, done } = await reader.read()
-
-                    if (done) {
-                      doneReading = true
-                      pumpQueue()
-                      return
-                    }
-
-                    queue.push(value)
-                    pumpQueue()
-                  }
-                }
-
-                readLoop()
+                return null
               })
-                */
-              /*
-              // 2. decrypt stream (no Blob involved)
-              const plaintextStream =
-                await keychain.decryptStream(encryptedStream)
-
-              // 3. OPFS
-              const root = await navigator.storage.getDirectory()
-
-              const tempName = crypto.randomUUID() + '.img'
-
-              const handle = await root.getFileHandle(tempName, {
-                create: true
-              })
-
-              const writable = await handle.createWritable()
-
-              // 4. stream directly into OPFS (NO memory spike)
-              await plaintextStream.pipeTo(writable)
-
-              // 5. reopen as File (snapshot from disk)
-              const imgFile = await handle.getFile()
-
-              // 6. show in DOM
-              const url = URL.createObjectURL(imgFile)
-
-              const img = document.createElement('img')
-              img.src = url
-              document.body.appendChild(img)
-              */
-              /*
-              img.onload = async () => {
-                URL.revokeObjectURL(url)
-
-                try {
-                  await root.removeEntry(tempName)
-                } catch (e) {
-                  console.warn('OPFS cleanup failed', e)
-                }
+              if (!decryptedStream) {
+                // fallback to original iterator (must stay valid)
+                yield* iterator
+                return
               }
-              */
-              //if (decrypted.error) return TODO...
-              console.log('*********', decrypted)
-              renderTarget.src = URL.createObjectURL(await new Response(decrypted.text).blob())
-            } else {
-              file.streamTo(renderTarget)
-            }
-          } else {
-            // or file.on('stream', function ({ stream, file, req }, function pipeCallback) {})
-            file.streamTo(renderTarget)
-          }
-        //} catch (error) {
-          // or file.on('stream', function ({ stream, file, req }, function pipeCallback) {})
-          //file.streamTo(renderTarget)
-        //}
-      } else {
-        file.blob().then(blob => renderTarget.setAttribute(targetAttribute || 'src', URL.createObjectURL(blob)))
-      }
+              const reader = decryptedStream.getReader()
+              while (true) {
+                const { value, done } = await reader.read()
+                if (done) return
+                yield value
+              }
+            })())
+          })
+        }
+      })
     }
     file.on('stream', streamOrDoneFunc)
     file.on('done', streamOrDoneFunc)

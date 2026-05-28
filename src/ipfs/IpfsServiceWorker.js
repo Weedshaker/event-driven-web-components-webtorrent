@@ -29,7 +29,7 @@ const IpfsServiceWorker = (ChosenExtend = class {}) => class IpfsServiceWorker e
         'Content-Type': 'application/octet-stream',
         'Accept-Ranges': 'bytes',
         'Content-Range': `bytes ${rangeStart}-${rangeEnd || ''}/${rangeTotal}`,
-        'Content-Length': rangeEnd === undefined ? String(rangeTotal) : String(rangeEnd - rangeStart + 1) // 0-0 starts with 1 thats why it must be added here
+        'Content-Length': rangeEnd ? String(rangeEnd - rangeStart + 1) : String(rangeTotal) // 0-0 starts with 1 thats why it must be added here
       }
     return event.respondWith(new Response(IpfsServiceWorker.createMultipartStream(directoryRoot, partsRange), {
       status: rangeStart === undefined ? 200 : 206,
@@ -84,7 +84,7 @@ const IpfsServiceWorker = (ChosenExtend = class {}) => class IpfsServiceWorker e
               headers: part.start === undefined
                 ? {}
                 : {
-                  Range: part.end === undefined ? `bytes=${part.start}-${part.total}` : `bytes=${part.start}-${part.end}`
+                  Range: part.end ? `bytes=${part.start}-${part.end}` : `bytes=${part.start}-${part.total}`
                 }
             })
             if (!response.ok) throw new Error(`Bad response: ${response.status}`)
