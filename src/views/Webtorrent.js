@@ -399,6 +399,7 @@ export default class Webtorrent extends Intersection() {
           if (streamToServerReadyPromise.done) {
             videoResults[0].renderTarget.setAttribute('poster', file.streamURL)
           } else {
+            // TODO: decrypt this blob too
             file.blob().then(blob => videoResults[0].renderTarget.setAttribute('poster', URL.createObjectURL(blob)))
           }
         }
@@ -416,13 +417,109 @@ export default class Webtorrent extends Intersection() {
     return results
   }
 
-  static async renderFileTo (file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, streamOrDoneFunc, torrentId, thisNode, tagName = '', append = true) {
+  static async renderFileTo (file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, streamOrDoneFunc, torrentId, thisNode, tagName, append) {
+    // check if file is encrypted and if so, get the ReadableStream of stream decrypt
+    const torrentIdUrl = new URL(torrentId)
+    let keyEpoch, iv, keyContainer
+    if ((keyEpoch = torrentIdUrl.searchParams.get('key-epoch')) && (iv = torrentIdUrl.searchParams.get('iv'))) {
+      keyContainer = await new Promise(resolve => thisNode.dispatchEvent(new CustomEvent('yjs-get-key', {
+        detail: {
+          epoch: keyEpoch,
+          resolve
+        },
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      })))
+      if (keyContainer) {
+        file.on('iterator', ({ iterator, file, req }, cb) => {
+          // decrypt on each iteration the requested chunks
+          cb((async function* () {
+            const [, start, end] = (/bytes=(\d+)-(\d*)/.exec(req?.headers?.range) || []).map(num => Number(num))
+            const decryptedStream = await new Promise(async resolve => thisNode.dispatchEvent(new CustomEvent('yjs-decrypt', {
+              detail: {
+                resolve,
+                encrypted: {
+                  text: file,
+                  iv: new Uint8Array(iv.split(',')),
+                  name: 'wormhole-crypto',
+                  key: keyContainer.key.epoch,
+                  start,
+                  length: end ? end - start + 1 : file.length - 1,
+                  fileLength: file.length
+                },
+                key: keyContainer
+              },
+              bubbles: true,
+              cancelable: true,
+              composed: true
+            }))).then(result => {
+              if (result) {
+                const { decrypted } = result
+                if (decrypted.error) return null
+                return decrypted.text
+              }
+              return null
+            })
+            if (!decryptedStream) {
+              // fallback to original iterator (must stay valid)
+              yield* iterator
+              return
+            }
+            const reader = decryptedStream.getReader()
+            while (true) {
+              const { value, done } = await reader.read()
+              if (done) return
+              yield value
+            }
+          })())
+        })
+      }
+    }
+    file.on('stream', streamOrDoneFunc)
+    file.on('done', streamOrDoneFunc)
+    return await Webtorrent._renderFileTo(file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, keyContainer, iv, thisNode, tagName, append)
+  }
+
+  static async _renderFileTo (file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, keyContainer, iv, thisNode, tagName = '', append = true) {
+    const getBlob = async () => {
+      if (keyContainer) {
+        const decryptedStream = await new Promise(async resolve => thisNode.dispatchEvent(new CustomEvent('yjs-decrypt', {
+          detail: {
+            resolve,
+            encrypted: {
+              text: file,
+              iv: new Uint8Array(iv.split(',')),
+              name: 'wormhole-crypto',
+              key: keyContainer.key.epoch
+            },
+            key: keyContainer
+          },
+          bubbles: true,
+          cancelable: true,
+          composed: true
+        }))).then(result => {
+          if (result) {
+            const { decrypted } = result
+            if (decrypted.error) return null
+            return decrypted.text
+          }
+          return null
+        })
+        if (!decryptedStream) return await file.blob()
+        return await new Response(decryptedStream, {
+          headers: { 'Content-Type': 'application/octet-stream' }
+        }).blob()
+      } else {
+        return await file.blob()
+      }
+    }
     // streamTo and streamURL only work when service worker is up and running
-    const setHref = target => {
+    const setHref = async target => {
       if (streamToServerReadyPromise.done && !/OS 16_/.test(navigator.userAgent)) {
         target.setAttribute('href', file.streamURL)
       } else {
-        file.blob().then(blob => target.setAttribute('href', URL.createObjectURL(blob)))
+        target.setAttribute('href', URL.createObjectURL(await getBlob()))
       }
     }
     let targetAttribute
@@ -446,70 +543,9 @@ export default class Webtorrent extends Intersection() {
       if (streamToServerReadyPromise.done && tagName !== 'embed' && tagName !== 'iframe') {
         file.streamTo(renderTarget)
       } else {
-        file.blob().then(blob => renderTarget.setAttribute(targetAttribute || 'src', URL.createObjectURL(blob)))
+        renderTarget.setAttribute(targetAttribute || 'src', URL.createObjectURL(await getBlob()))
       }
     }
-    // check if file is encrypted and if so, get the ReadableStream of stream decrypt
-    const torrentIdUrl = new URL(torrentId)
-    let keyEpoch, iv
-    if ((keyEpoch = torrentIdUrl.searchParams.get('key-epoch')) && (iv = torrentIdUrl.searchParams.get('iv'))) {
-      new Promise(resolve => thisNode.dispatchEvent(new CustomEvent('yjs-get-key', {
-        detail: {
-          epoch: keyEpoch,
-          resolve
-        },
-        bubbles: true,
-        cancelable: true,
-        composed: true
-      }))).then(keyContainer => {
-        if (keyContainer) {
-          file.on('iterator', ({ iterator, file, req }, cb) => {
-            // decrypt on each iteration the requested chunks
-            cb((async function* () {
-              const [, start, end] = (/bytes=(\d+)-(\d*)/.exec(req?.headers?.range) || []).map(num => Number(num))
-              const decryptedStream = await new Promise(async resolve => thisNode.dispatchEvent(new CustomEvent('yjs-decrypt', {
-                detail: {
-                  resolve,
-                  encrypted: {
-                    text: file,
-                    iv: new Uint8Array(iv.split(',')),
-                    name: 'wormhole-crypto',
-                    key: keyContainer.key.epoch,
-                    start,
-                    length: end ? end - start + 1 : file.length - 1,
-                    fileLength: file.length
-                  },
-                  key: keyContainer
-                },
-                bubbles: true,
-                cancelable: true,
-                composed: true
-              }))).then(result => {
-                if (result) {
-                  const { decrypted } = result
-                  if (decrypted.error) return null
-                  return decrypted.text
-                }
-                return null
-              })
-              if (!decryptedStream) {
-                // fallback to original iterator (must stay valid)
-                yield* iterator
-                return
-              }
-              const reader = decryptedStream.getReader()
-              while (true) {
-                const { value, done } = await reader.read()
-                if (done) return
-                yield value
-              }
-            })())
-          })
-        }
-      })
-    }
-    file.on('stream', streamOrDoneFunc)
-    file.on('done', streamOrDoneFunc)
     return {renderTarget, appendTarget, figureTarget, file, tagName}
   }
 
