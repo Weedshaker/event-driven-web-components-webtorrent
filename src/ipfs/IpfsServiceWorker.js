@@ -7,7 +7,7 @@ const IpfsServiceWorker = (ChosenExtend = class {}) => class IpfsServiceWorker e
     if (!request.url.includes('/webtorrent-web-seed/')) return false
     const range = request.headers.get('range')
     if (!range) return event.respondWith(new Response('Range required', { status: 400 })) || true
-    const [, rangeStart, rangeEnd] = /bytes=(\d+)-(\d+)/.exec(range).map(num => Number(num))
+    const [, rangeStart, rangeEnd] = (/bytes=(\d+)-(\d*)/.exec(range) || []).map(num => Number(num))
     const [directoryRoot, filesMetadataUrl] = request.url.split('/files-metadata/')
     let [filesMetadata, pathname] = filesMetadataUrl.split('/webtorrent-web-seed/')
     try {
@@ -19,14 +19,21 @@ const IpfsServiceWorker = (ChosenExtend = class {}) => class IpfsServiceWorker e
     const fileName = decodeURIComponent(pathname.replace(/^.*\/(.*)$/, '$1'))
     const {parts: partsRange, rangeTotal} = IpfsServiceWorker.resolveRange(filesMetadata, fileName, rangeStart, rangeEnd)
     if (partsRange === undefined || !partsRange.length || rangeTotal === undefined) return event.respondWith(new Response(`FileName: ${fileName} not found in files metadata`, { status: 400 })) || true
-    return event.respondWith(new Response(IpfsServiceWorker.createMultipartStream(directoryRoot, partsRange), {
-      status: 206,
-      headers: {
+    const headers = rangeStart === undefined
+      ? {
+          'Content-Type': 'application/octet-stream',
+          'Accept-Ranges': 'bytes',
+          'Content-Length': String(rangeTotal)
+        }
+      : {
         'Content-Type': 'application/octet-stream',
         'Accept-Ranges': 'bytes',
-        'Content-Range': `bytes ${rangeStart}-${rangeEnd}/${rangeTotal}`,
-        'Content-Length': String(rangeEnd - rangeStart + 1) // 0-0 starts with 1 thats why it must be added here
+        'Content-Range': `bytes ${rangeStart}-${rangeEnd || ''}/${rangeTotal}`,
+        'Content-Length': rangeEnd === undefined ? String(rangeTotal) : String(rangeEnd - rangeStart + 1) // 0-0 starts with 1 thats why it must be added here
       }
+    return event.respondWith(new Response(IpfsServiceWorker.createMultipartStream(directoryRoot, partsRange), {
+      status: rangeStart === undefined ? 200 : 206,
+      headers
     })) || true
   }
 
@@ -39,7 +46,8 @@ const IpfsServiceWorker = (ChosenExtend = class {}) => class IpfsServiceWorker e
     return {parts: [{
       name: file.cid,
       start,
-      end
+      end,
+      total: file.length - 1
     }], rangeTotal: file.length - 1 /* -1 because it starts at 0 */}
   }
   /*
@@ -73,11 +81,13 @@ const IpfsServiceWorker = (ChosenExtend = class {}) => class IpfsServiceWorker e
         try {
           for (const part of parts) {
             const response = await fetch(`${directoryRoot}/${part.name}`, {
-              headers: {
-                Range: `bytes=${part.start}-${part.end}`
-              }
+              headers: part.start === undefined
+                ? {}
+                : {
+                  Range: part.end === undefined ? `bytes=${part.start}-${part.total}` : `bytes=${part.start}-${part.end}`
+                }
             })
-            if (!response.ok && response.status !== 206) throw new Error(`Bad response: ${response.status}`)
+            if (!response.ok) throw new Error(`Bad response: ${response.status}`)
             const reader = response.body.getReader()
             while (true) {
               const { done, value } = await reader.read()
