@@ -235,8 +235,6 @@ export default class Ipfs extends HTMLElement {
    */
   async addAll (inputFiles, torrent) {
     const client = this.getGateway('add').gateway?.client
-    // @ts-ignore
-    const blockstore = new BlockstoreCore.MemoryBlockstore()
     const filesCidMetadata = []
     // upload files and collect metadata
     await Promise.all(Ipfs.createFileListArray(inputFiles, torrent).map(async (file, i) => {
@@ -543,6 +541,8 @@ export default class Ipfs extends HTMLElement {
     const func = async () => {
       const createFileCid = async file => {
         // create the cid local when .add fails to at least get the file list json file
+        // @ts-ignore
+        const blockstore = new BlockstoreCore.MemoryBlockstore()
         // @ts-ignore
         for await (const result of IpfsUnixfsImporter.importer([file], blockstore, {
           cidVersion: this.cidVersion,
