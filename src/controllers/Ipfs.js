@@ -163,7 +163,7 @@ export default class Ipfs extends HTMLElement {
         if (event.detail?.resolveCid) this.respond(event.detail.resolveCid, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {cid: (cidOne = await this.createFileListCid(inputFiles, torrent))})
         // adds and returns the filesCidMetadata cid
         this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {cid: (cidTwo = await this.addAll(inputFiles, torrent))})
-        if (cidOne && cidTwo && cidOne !== cidTwo) console.warn('Error while creating cid\'s', {cidOne, cidTwo})
+        if (cidOne && cidTwo && cidOne !== cidTwo) console.warn('Error while creating cids', {cidOne, cidTwo})
       }
       // preferred to consume the files directly from File Input but must be sorted analog controller/Webtorrent.js client.seed L: 282, sometimes the torrent.files made trouble to stream, which resulted in some Readable Stream error
       const files = event.detail.input ? Array.from(event.detail.input).sort((a, b) => a.name.localeCompare(b.name)) : event.detail.torrent.files
@@ -334,8 +334,8 @@ export default class Ipfs extends HTMLElement {
         //lastModified: inputFiles[counter].lastModified, // avoid this, otherwise the cid is always going to change
         name: inputFiles[counter].name,
         type: inputFiles[counter].type,
-        offset: torrent.files[counter].offset,
-        length: torrent.files[counter].length
+        offset: torrent.files[counter]?.offset,
+        length: torrent.files[counter]?.length
       }
       : {
         cid: result.cid.toString(),
