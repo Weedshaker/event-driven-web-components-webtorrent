@@ -129,7 +129,7 @@ export default class Webtorrent extends WebWorker() {
     this.importMetaUrl = import.meta.url.replace(/(.*\/)(.*)$/, '$1')
     // set attribute namespace
     this.namespace = this.getAttribute('namespace') || 'webtorrent-'
-    const stallTimeout = 30000 // has to be less than the timeout at view
+    const stallTimeout = 10000 // has to be less than the timeout at view
     // init is going to fill this Promise
     this.setClientPromise()
     const presetAddOpts = {

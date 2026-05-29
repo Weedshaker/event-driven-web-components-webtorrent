@@ -20,7 +20,7 @@ export default class Webtorrent extends Intersection() {
     
     // set attribute namespace
     this.namespace = this.getAttribute('namespace') || 'webtorrent-'
-    this.stallTimeout = 10000
+    this.stallTimeout = 15000
     /** @type {{renderTarget, appendTarget, figureTarget, file, tagName}[]} */
     this.webtorrentTargetElements = []
     this.renderTorrentQueue = []
