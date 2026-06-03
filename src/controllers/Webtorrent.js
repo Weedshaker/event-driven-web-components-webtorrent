@@ -576,6 +576,7 @@ export default class Webtorrent extends WebWorker() {
     }
     // @ts-ignore
     if (Array.isArray(torrentContainers.added) && torrentContainers.added.length > 20) torrentContainers.added.length = 20
+    access.truncate(0)
     access.write(new TextEncoder().encode(JSON.stringify(torrentContainers)), { at: 0 })
     access.flush()
     access.close()
