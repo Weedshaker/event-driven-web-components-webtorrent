@@ -347,15 +347,36 @@ export default class Webtorrent extends WebWorker() {
       }
     }
 
-    this.webtorrentViewFileErrorEventListener = event => this.reset(true)
+    const fileErrorTorrentId = []
+    let fileErrorTimestamp = Date.now()
+    this.webtorrentViewFileErrorEventListener = event => {
+      // not form the same torrent/torrentId
+      if (event.detail?.torrentId && !fileErrorTorrentId.includes(event.detail.torrentId)) {
+        if (!event.detail?.wasStreaming) {
+          // not streaming, file errors within 2s do not check if stalled
+          this.reset(fileErrorTimestamp + 2000 < Date.now()
+            ? false
+            : true
+          )
+        }
+        fileErrorTimestamp = Date.now()
+        fileErrorTorrentId.push(event.detail.torrentId)
+      }
+    }
 
-    this.webtorrentViewTorrentErrorEventListener = event => this.reset(true)
+    const torrentErrorTorrentId = []
+    this.webtorrentViewTorrentErrorEventListener = event => {
+      if (event.detail?.torrentId && !torrentErrorTorrentId.includes(event.detail.torrentId)) {
+        this.reset(true)
+        torrentErrorTorrentId.push(event.detail.torrentId)
+      }
+    }
 
-    let counter = 0
+    let resetCounter = 0
     this.webtorrentViewResetLinkClickEventListener = event => {
       // every 3rd time reset
-      if (counter % 3 === 2) this.reset()
-      counter++
+      if (resetCounter % 3 === 2) this.reset()
+      resetCounter++
     }
     
     this.onlineEventListener = event => this.reset(true)
@@ -417,6 +438,7 @@ export default class Webtorrent extends WebWorker() {
     }
     client.destroy(error => {
       Webtorrent.#torrentMap.clear()
+      Webtorrent.#torrentFileMap.clear()
       // init is going to fill this Promise
       this.setClientPromise()
       clientDestroyedResolve(error)

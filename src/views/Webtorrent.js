@@ -65,7 +65,8 @@ export default class Webtorrent extends Intersection() {
             this.dispatchEvent(new CustomEvent(`${this.namespace}view-file-error`, {
               detail: {
                 errorCounter,
-                torrentId: this.torrentId
+                torrentId: this.torrentId,
+                wasStreaming: this.wasStreaming
               },
               bubbles: true,
               cancelable: true,
