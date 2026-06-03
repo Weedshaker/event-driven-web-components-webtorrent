@@ -129,7 +129,6 @@ export default class Webtorrent extends WebWorker() {
     this.importMetaUrl = import.meta.url.replace(/(.*\/)(.*)$/, '$1')
     // set attribute namespace
     this.namespace = this.getAttribute('namespace') || 'webtorrent-'
-    const stallTimeout = 10000 // has to be less than the timeout at view
     // init is going to fill this Promise
     this.setClientPromise()
     const presetAddOpts = {
@@ -315,9 +314,9 @@ export default class Webtorrent extends WebWorker() {
       this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise}, torrent, () => clearInterval(checkTorrentDestroyedIntervalId))
     }
 
-    this.webtorrentResetEventListener = event => this.reset()
+    this.webtorrentResetEventListener = event => this.reset(event.detail?.checkIfStalled)
 
-    this.webtorrentIsStalledEventListener = async event => {
+    this.webtorrentViewIsStalledEventListener = async event => {
       let torrentContainer
       if (!event.detail.torrent.done && (torrentContainer = (await Webtorrent.#torrentMap.get(event.detail.torrent.infoHash)))) {
         if (torrentContainer.cid) new Promise(resolve => this.dispatchEvent(new CustomEvent('ipfs-cat', {
@@ -332,26 +331,34 @@ export default class Webtorrent extends WebWorker() {
           cancelable: true,
           composed: true
         }))).then(result => {
-          if (Array.isArray(result.files) && result.files.length) this.webtorrentSeedEventListener({
-            detail: {
-              input: result.files,
-              uid: event.detail.uid || torrentContainer.uid,
-              room: torrentContainer.room,
-              cid: torrentContainer.cid
-            }
-          })
+          if (Array.isArray(result.files) && result.files.length && result.files.every(file => file)) {
+            this.webtorrentSeedEventListener({
+              detail: {
+                input: result.files,
+                uid: event.detail.uid || torrentContainer.uid,
+                room: torrentContainer.room,
+                cid: torrentContainer.cid
+              }
+            })
+          } else {
+            this.reset()
+          }
         })
       }
     }
-    
-    let resetTimeoutId
-    this.onlineEventListener = event => {
-      clearTimeout(resetTimeoutId)
-      resetTimeoutId = setTimeout(async () => {
-        const client = await this.clientPromise
-        if (client.torrents.some(torrent => torrent.numPeers > 0) && client.torrents.every(torrent => !torrent.downloadSpeed && !torrent.uploadSpeed)) this.reset()
-      }, stallTimeout)
+
+    this.webtorrentViewFileErrorEventListener = event => this.reset(true)
+
+    this.webtorrentViewTorrentErrorEventListener = event => this.reset(true)
+
+    let counter = 0
+    this.webtorrentViewResetLinkClickEventListener = event => {
+      // every 3rd time reset
+      if (counter % 3 === 2) this.reset()
+      counter++
     }
+    
+    this.onlineEventListener = event => this.reset(true)
   }
 
   async init () {
@@ -418,11 +425,18 @@ export default class Webtorrent extends WebWorker() {
     return this.clientDestroyedPromise
   }
 
-  reset () {
+  reset (checkIfStalled = false) {
     clearTimeout(this.resetClientTimeout)
-    this.resetClientTimeout = setTimeout(() => {
+    this.resetClientTimeout = setTimeout(async () => {
+      if (checkIfStalled && (await this.clientPromise).torrents.some(torrent => torrent.downloadSpeed || torrent.uploadSpeed)) return false
       this.destroy()
       this.init()
+      this.dispatchEvent(new CustomEvent(`${this.namespace}did-reset`, {
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      }))
+      return true
     }, this.hasAttribute('client-reset-delay') ? Number(this.getAttribute('client-reset-delay')) : 2000)
   }
 
@@ -431,7 +445,10 @@ export default class Webtorrent extends WebWorker() {
     document.body.addEventListener(`${this.namespace}add`, this.webtorrentAddEventListener)
     document.body.addEventListener(`${this.namespace}seed`, this.webtorrentSeedEventListener)
     document.body.addEventListener(`${this.namespace}reset`, this.webtorrentResetEventListener)
-    document.body.addEventListener(`${this.namespace}is-stalled`, this.webtorrentIsStalledEventListener)
+    document.body.addEventListener(`${this.namespace}view-is-stalled`, this.webtorrentViewIsStalledEventListener)
+    document.body.addEventListener(`${this.namespace}view-file-error`, this.webtorrentViewFileErrorEventListener)
+    document.body.addEventListener(`${this.namespace}view-torrent-error`, this.webtorrentViewTorrentErrorEventListener)
+    document.body.addEventListener(`${this.namespace}view-reset-link-click`, this.webtorrentViewResetLinkClickEventListener)
     self.addEventListener('online', this.onlineEventListener)
   }
 
@@ -440,7 +457,10 @@ export default class Webtorrent extends WebWorker() {
     document.body.removeEventListener(`${this.namespace}add`, this.webtorrentAddEventListener)
     document.body.removeEventListener(`${this.namespace}seed`, this.webtorrentSeedEventListener)
     document.body.removeEventListener(`${this.namespace}reset`, this.webtorrentResetEventListener)
-    document.body.removeEventListener(`${this.namespace}is-stalled`, this.webtorrentIsStalledEventListener)
+    document.body.removeEventListener(`${this.namespace}view-is-stalled`, this.webtorrentViewIsStalledEventListener)
+    document.body.removeEventListener(`${this.namespace}view-file-error`, this.webtorrentViewFileErrorEventListener)
+    document.body.removeEventListener(`${this.namespace}view-torrent-error`, this.webtorrentViewTorrentErrorEventListener)
+    document.body.removeEventListener(`${this.namespace}view-reset-link-click`, this.webtorrentViewResetLinkClickEventListener)
     self.removeEventListener('online', this.onlineEventListener)
   }
 

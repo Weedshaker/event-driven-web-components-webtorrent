@@ -20,12 +20,31 @@ export default class Webtorrent extends Intersection() {
     
     // set attribute namespace
     this.namespace = this.getAttribute('namespace') || 'webtorrent-'
-    this.stallTimeout = 15000
+    this.torrentId = this.getAttribute('torrent-id') || encodeURI(Array.from((new URL(location.href)).searchParams).reduce((acc, curr) => curr[0] === 'torrent-id'
+      ? `${curr[1]}`
+      : `${acc}&${curr[0]}=${curr[1]}`, ''))
+    const torrentIdUrl = new URL(this.torrentId)
+    this.keyEpoch = torrentIdUrl.searchParams.get('key-epoch')
+    this.iv = torrentIdUrl.searchParams.get('iv')
     /** @type {{renderTarget, appendTarget, figureTarget, file, tagName}[]} */
     this.webtorrentTargetElements = []
     this.renderTorrentQueue = []
+    const initTimestamp = Date.now()
+    
+    this.stallTimeout = 10000
+    const stillScrollAfter = 3000
 
-    this.torrentErrorEventListener = event => this.renderTorrent(true)
+    this.torrentErrorEventListener = event => {
+      this.renderTorrent(true)
+      this.dispatchEvent(new CustomEvent(`${this.namespace}view-torrent-error`, {
+        detail: {
+          torrentId: this.torrentId
+        },
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      }))
+    }
 
     let errorCounter = 0
     let errorTimeoutID
@@ -33,19 +52,29 @@ export default class Webtorrent extends Intersection() {
       if (event.target?.tagName === 'TRACK') return
       clearTimeout(errorTimeoutID)
       errorTimeoutID = setTimeout(() => {
-        console.warn('Webtorrent view error:', event, event.target, ':is webworker active?')
-        // reset counter after 4
+        console.warn('Webtorrent view error:', event, event.target || this, ':is webworker active?')
+        this.hadFileError = true
+        // reset counter after 3
         /** @type {ErrorCounter} */
-        const errorCounterStatus = errorCounter % 5
-        // stop cycle after 10 and reaching status 4
-        if (errorCounter < 10 || errorCounterStatus === 4) {
+        const errorCounterStatus = errorCounter % 4
+        // stop cycle after 10 and reaching status 3
+        if (errorCounter < 10 || errorCounterStatus === 3) {
           this.setAttribute('error', '')
-          this.renderTorrent(errorCounterStatus === 2 || errorCounterStatus === 3 ? true : false, errorCounterStatus === 4 ? true : false).then(() => {
-            if (errorCounterStatus < 3) this.removeAttribute('error')
+          this.renderTorrent(errorCounterStatus === 1 || errorCounterStatus === 2 ? true : false, errorCounterStatus === 3 ? true : false, (errorCounterStatus === 0 && this.wasStreaming && initTimestamp + stillScrollAfter > Date.now())).then(() => {
+            if (errorCounterStatus < 2) this.removeAttribute('error')
+            this.dispatchEvent(new CustomEvent(`${this.namespace}view-file-error`, {
+              detail: {
+                errorCounter,
+                torrentId: this.torrentId
+              },
+              bubbles: true,
+              cancelable: true,
+              composed: true
+            }))
           })
         }
         errorCounter++
-      }, 2000)
+      }, 200)
     }
 
     // Avoid DOM performance issues
@@ -73,8 +102,22 @@ export default class Webtorrent extends Intersection() {
     this.resetLinkEventListener = event => {
       event.preventDefault()
       event.stopPropagation()
-      this.torrentErrorEventListener(event)
-      // TODO: 3rd time reset client
+      this.renderTorrent(true)
+      this.dispatchEvent(new CustomEvent(`${this.namespace}view-reset-link-click`, {
+        detail: {
+          torrentId: this.torrentId
+        },
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      }))
+    }
+
+    this.webtorrentDidResetEventListener = event => {
+      clearTimeout(errorTimeoutID)
+      this.hadFileError = false
+      this.removeAttribute('error')
+      errorCounter = 0
     }
 
     // this updates the min-height on resize, see updateHeight function for more info
@@ -92,12 +135,24 @@ export default class Webtorrent extends Intersection() {
     if (this.shouldRenderCSS()) showPromises.push(this.renderCSS())
     if (this.shouldRenderHTML()) showPromises.push(this.renderHTML())
     Promise.all(showPromises).then(() => (this.hidden = false))
-    if (this.isConnected) this.connectedCallbackOnce()
     this.resetLink.addEventListener('click', this.resetLinkEventListener)
     self.addEventListener('resize', this.resizeEventListener)
+    document.body.addEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
+    if (this.isConnected) this.connectedCallbackOnce()
   }
 
   connectedCallbackOnce () {
+    this.keyContainer = this.keyEpoch
+      ? new Promise(resolve => this.dispatchEvent(new CustomEvent('yjs-get-key', {
+        detail: {
+          epoch: this.keyEpoch,
+          resolve
+        },
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      })))
+      : Promise.resolve(null)
     this.renderTorrent(false, false, true)
     // @ts-ignore
     this.connectedCallbackOnce = () => {}
@@ -108,6 +163,7 @@ export default class Webtorrent extends Intersection() {
     this.details.removeEventListener('toggle', this.detailsToggleEventListener)
     this.resetLink.removeEventListener('click', this.resetLinkEventListener)
     self.removeEventListener('resize', this.resizeEventListener)
+    document.body.removeEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
   }
 
   intersectionCallback (entries, observer) {
@@ -145,7 +201,6 @@ export default class Webtorrent extends Intersection() {
    * @return {Promise<void>}
    */
   renderCSS () {
-    // TODO: fix IOS audio element display
     this.css = /* css */`
       ::slotted(video), ::slotted(img), :where(video, img) {
         height: auto;
@@ -285,9 +340,7 @@ export default class Webtorrent extends Intersection() {
       detail: {
         uid: this.getAttribute('uid'),
         room: this.getAttribute('room'),
-        torrentId: this.getAttribute('torrent-id') || encodeURI(Array.from((new URL(location.href)).searchParams).reduce((acc, curr) => curr[0] === 'torrent-id'
-          ? `${curr[1]}`
-          : `${acc}&${curr[0]}=${curr[1]}`, '')),
+        torrentId: this.torrentId,
         destroyOpts: resetTorrent === true ? {destroyStore: false} : resetTorrent === 'destroyStore' ? {destroyStore: true} : undefined,
         resolve
       },
@@ -316,9 +369,10 @@ export default class Webtorrent extends Intersection() {
           }
           // is torrent stalled
           if (!torrent.done && (lastActivity + this.stallTimeout) < Date.now() && torrent.numPeers > 0 && !torrent.downloadSpeed && !torrent.uploadSpeed) {
-            this.dispatchEvent(new CustomEvent(`${this.namespace}is-stalled`, {
+            this.dispatchEvent(new CustomEvent(`${this.namespace}view-is-stalled`, {
               detail: {
-                torrent
+                torrent,
+                torrentId: this.torrentId
               },
               bubbles: true,
               cancelable: true,
@@ -353,18 +407,18 @@ export default class Webtorrent extends Intersection() {
       const renderFiles = async () => {
         let file
         if ((file = torrent.files.find(file => file.name === this.getAttribute('file-name')))) {
-          this.webtorrentTargetElements.push(await Webtorrent.renderFileTo(file, this, this.summary, streamToServerReadyPromise, undefined, streamOrDoneFunc, this.getAttribute('torrent-id'), this, tagName))
+          this.webtorrentTargetElements.push(await this.renderFileTo(file, this, this.summary, streamToServerReadyPromise, undefined, streamOrDoneFunc, tagName))
         } else {
-          this.webtorrentTargetElements = this.webtorrentTargetElements.concat(await Webtorrent.renderFilesTo(torrent, this, this.summary, streamToServerReadyPromise, this.getAttribute('torrent-id'), this, tagName, streamOrDoneFunc))
+          this.webtorrentTargetElements = this.webtorrentTargetElements.concat(await this.renderFilesTo(torrent, this, this.summary, streamToServerReadyPromise, tagName, streamOrDoneFunc))
         }
         this.webtorrentTargetElements.forEach(({renderTarget}) => {
-          renderTarget.addEventListener(['audio', 'video'].includes(renderTarget.tagName.toLowerCase()) ? 'loadeddata' : 'load', event => {
+          renderTarget.addEventListener(['audio', 'video'].includes(renderTarget.tagName.toLowerCase()) ? 'loadeddata' : 'loadstart', event => {
             this.updateHeight()
             this.removeAttribute('updating')
             if (keepScroll) this.dispatchEvent(new CustomEvent(`${this.namespace}load`, {
               detail: {
                 origEvent: event,
-                resetTorrent
+                torrentId: this.torrentId
               },
               bubbles: true,
               cancelable: true,
@@ -384,8 +438,8 @@ export default class Webtorrent extends Intersection() {
     })
   }
 
-  static async renderFilesTo (torrent, webComponent, targetContainer, streamToServerReadyPromise, torrentId, thisNode, tagName, streamOrDoneFunc) {
-    const results = await Promise.all(torrent.files.map(async (file, i) => await Webtorrent.renderFileTo(file, webComponent, targetContainer, streamToServerReadyPromise, i, streamOrDoneFunc, torrentId, thisNode, tagName, false)))
+  async renderFilesTo (torrent, webComponent, targetContainer, streamToServerReadyPromise, tagName, streamOrDoneFunc) {
+    const results = await Promise.all(torrent.files.map(async (file, i) => await this.renderFileTo(file, webComponent, targetContainer, streamToServerReadyPromise, i, streamOrDoneFunc, tagName, false)))
     const videoResults = results.filter(result => result.tagName === 'video')
     if (videoResults.length === 1) {
       targetContainer.prepend(videoResults[0].appendTarget)
@@ -399,8 +453,7 @@ export default class Webtorrent extends Intersection() {
           if (streamToServerReadyPromise.done) {
             videoResults[0].renderTarget.setAttribute('poster', file.streamURL)
           } else {
-            // TODO: decrypt this blob too
-            file.blob().then(blob => videoResults[0].renderTarget.setAttribute('poster', URL.createObjectURL(blob)))
+            this.getBlob(file, this.keyContainer).then(blob => videoResults[0].renderTarget.setAttribute('poster', URL.createObjectURL(blob)))
           }
         }
       })
@@ -417,26 +470,17 @@ export default class Webtorrent extends Intersection() {
     return results
   }
 
-  static async renderFileTo (file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, streamOrDoneFunc, torrentId, thisNode, tagName, append) {
+  async renderFileTo (file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, streamOrDoneFunc, tagName, append) {
     // check if file is encrypted and if so, get the ReadableStream of stream decrypt
-    const torrentIdUrl = new URL(torrentId)
-    let keyEpoch, iv, keyContainer
-    if ((keyEpoch = torrentIdUrl.searchParams.get('key-epoch')) && (iv = torrentIdUrl.searchParams.get('iv'))) {
-      keyContainer = await new Promise(resolve => thisNode.dispatchEvent(new CustomEvent('yjs-get-key', {
-        detail: {
-          epoch: keyEpoch,
-          resolve
-        },
-        bubbles: true,
-        cancelable: true,
-        composed: true
-      })))
-      if (keyContainer) {
+    let keyContainer, iv
+    if ((iv = this.iv)) {
+      if (keyContainer = await this.keyContainer) {
         file.on('iterator', ({ iterator, file, req }, cb) => {
+          this.wasStreaming = true
           // decrypt on each iteration the requested chunks
           cb((async function* () {
             const [, start, end] = (/bytes=(\d+)-(\d*)/.exec(req?.headers?.range) || []).map(num => Number(num))
-            const decryptedStream = await new Promise(async resolve => thisNode.dispatchEvent(new CustomEvent('yjs-decrypt', {
+            const decryptedStream = await new Promise(async resolve => webComponent.dispatchEvent(new CustomEvent('yjs-decrypt', {
               detail: {
                 resolve,
                 encrypted: {
@@ -478,48 +522,16 @@ export default class Webtorrent extends Intersection() {
     }
     file.on('stream', streamOrDoneFunc)
     file.on('done', streamOrDoneFunc)
-    return await Webtorrent._renderFileTo(file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, keyContainer, iv, thisNode, tagName, append)
+    return await this._renderFileTo(file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, keyContainer, tagName, append)
   }
 
-  static async _renderFileTo (file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, keyContainer, iv, thisNode, tagName = '', append = true) {
-    const getBlob = async () => {
-      if (keyContainer) {
-        const decryptedStream = await new Promise(async resolve => thisNode.dispatchEvent(new CustomEvent('yjs-decrypt', {
-          detail: {
-            resolve,
-            encrypted: {
-              text: file,
-              iv: new Uint8Array(iv.split(',')),
-              name: 'wormhole-crypto',
-              key: keyContainer.key.epoch
-            },
-            key: keyContainer
-          },
-          bubbles: true,
-          cancelable: true,
-          composed: true
-        }))).then(result => {
-          if (result) {
-            const { decrypted } = result
-            if (decrypted.error) return null
-            return decrypted.text
-          }
-          return null
-        })
-        if (!decryptedStream) return await file.blob()
-        return await new Response(decryptedStream, {
-          headers: { 'Content-Type': 'application/octet-stream' }
-        }).blob()
-      } else {
-        return await file.blob()
-      }
-    }
+  async _renderFileTo (file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, keyContainer, tagName = '', append = true) {
     // streamTo and streamURL only work when service worker is up and running
     const setHref = async target => {
       if (streamToServerReadyPromise.done && !/OS 16_/.test(navigator.userAgent)) {
         target.setAttribute('href', file.streamURL)
       } else {
-        target.setAttribute('href', URL.createObjectURL(await getBlob()))
+        target.setAttribute('href', URL.createObjectURL(await this.getBlob(file, keyContainer)))
       }
     }
     let targetAttribute
@@ -540,13 +552,48 @@ export default class Webtorrent extends Intersection() {
       a.setAttribute('download', file.name)
       a.textContent = file.name
       renderTarget.prepend(a)
-      if (streamToServerReadyPromise.done && tagName !== 'embed' && tagName !== 'iframe') {
+      // here we can consider tagName !== 'video' instead of (!this.hadFileError && !this.wasStreaming), which still makes videos trying to stream decrypt, which does not work, then fail and rerender
+      if (streamToServerReadyPromise.done && tagName !== 'embed' && tagName !== 'iframe' && (!this.hadFileError && !this.wasStreaming)) {
         file.streamTo(renderTarget)
       } else {
-        renderTarget.setAttribute(targetAttribute || 'src', URL.createObjectURL(await getBlob()))
+        renderTarget.setAttribute(targetAttribute || 'src', URL.createObjectURL(await this.getBlob(file, keyContainer)))
       }
     }
     return {renderTarget, appendTarget, figureTarget, file, tagName}
+  }
+
+  async getBlob (file, keyContainer) {
+    if (keyContainer) {
+      const decryptedStream = await new Promise(async resolve => this.dispatchEvent(new CustomEvent('yjs-decrypt', {
+        detail: {
+          resolve,
+          encrypted: {
+            text: file,
+            // @ts-ignore
+            iv: new Uint8Array(this.iv.split(',')),
+            name: 'wormhole-crypto',
+            key: keyContainer.key.epoch
+          },
+          key: keyContainer
+        },
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      }))).then(result => {
+        if (result) {
+          const { decrypted } = result
+          if (decrypted.error) return null
+          return decrypted.text
+        }
+        return null
+      })
+      if (!decryptedStream) return await file.blob()
+      return await new Response(decryptedStream, {
+        headers: { 'Content-Type': 'application/octet-stream' }
+      }).blob()
+    } else {
+      return await file.blob()
+    }
   }
 
   /**
