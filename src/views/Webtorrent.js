@@ -26,9 +26,11 @@ export default class Webtorrent extends Intersection() {
     const torrentIdUrl = new URL(this.torrentId)
     this.keyEpoch = torrentIdUrl.searchParams.get('key-epoch')
     this.iv = torrentIdUrl.searchParams.get('iv')
+    let xt
+    if ((xt = torrentIdUrl.searchParams.get('xt'))) this.infoHash = xt.replace('urn:btih:', '').toLowerCase()
     /** @type {{renderTarget, appendTarget, figureTarget, file, tagName}[]} */
     this.webtorrentTargetElements = []
-    this.renderTorrentQueue = []
+    this.renderReject = null
     const initTimestamp = Date.now()
     
     this.stallTimeout = 10000
@@ -121,6 +123,8 @@ export default class Webtorrent extends Intersection() {
       errorCounter = 0
     }
 
+    this.webtorrentInfoHashEventListener = event => this.renderTorrent()
+
     // this updates the min-height on resize, see updateHeight function for more info
     let resizeTimeout = null
     this.resizeEventListener = event => {
@@ -140,6 +144,7 @@ export default class Webtorrent extends Intersection() {
     this.resetLink.addEventListener('click', this.resetLinkEventListener)
     self.addEventListener('resize', this.resizeEventListener)
     document.body.addEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
+    if (this.infoHash) document.body.addEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
     if (this.isConnected) this.connectedCallbackOnce()
   }
 
@@ -166,6 +171,7 @@ export default class Webtorrent extends Intersection() {
     this.resetLink.removeEventListener('click', this.resetLinkEventListener)
     self.removeEventListener('resize', this.resizeEventListener)
     document.body.removeEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
+    if (this.infoHash) document.body.removeEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
   }
 
   intersectionCallback (entries, observer) {
@@ -321,11 +327,10 @@ export default class Webtorrent extends Intersection() {
     this.setAttribute('updating', '')
     this.details.setAttribute('open', '')
     clearInterval(this.intervalID)
-    const queuePromiseAll = Promise.all(this.renderTorrentQueue)
-    let queueResolve
-    const queuePromise = new Promise(resolve => (queueResolve = resolve))
-    this.renderTorrentQueue.push(queuePromise)
-    await queuePromiseAll
+    if (this.renderReject) {
+      this.renderReject()
+      this.renderReject = null
+    }
     // reset previous render
     if (keepScroll) await this.updateHeight()
     // clear previous torrent media elements
@@ -344,18 +349,21 @@ export default class Webtorrent extends Intersection() {
     progressTarget.setAttribute('max', '100')
     this.progressBar.appendChild(progressTarget)
     // get torrent
-    return new Promise(resolve => this.dispatchEvent(new CustomEvent(`${this.namespace}add`, {
-      detail: {
-        uid: this.getAttribute('uid'),
-        room: this.getAttribute('room'),
-        torrentId: this.torrentId,
-        destroyOpts: resetTorrent === true ? {destroyStore: false} : resetTorrent === 'destroyStore' ? {destroyStore: true} : undefined,
-        resolve
-      },
-      bubbles: true,
-      cancelable: true,
-      composed: true
-    }))).then(({torrent, streamToServerReadyPromise}) => {
+    return new Promise((resolve, reject) => {
+      this.renderReject = reject
+      this.dispatchEvent(new CustomEvent(`${this.namespace}add`, {
+        detail: {
+          uid: this.getAttribute('uid'),
+          room: this.getAttribute('room'),
+          torrentId: this.torrentId,
+          destroyOpts: resetTorrent === true ? {destroyStore: false} : resetTorrent === 'destroyStore' ? {destroyStore: true} : undefined,
+          resolve
+        },
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      }))
+    }).then(({torrent, streamToServerReadyPromise}) => {
       torrent.on('error', this.torrentErrorEventListener)
       const doneFunc = () => this.details.removeAttribute('open')
       if (torrent.done) doneFunc()
@@ -432,8 +440,6 @@ export default class Webtorrent extends Intersection() {
       } else {
         torrent.on('ready', renderFiles)
       }
-      queueResolve()
-      this.renderTorrentQueue.splice(this.renderTorrentQueue.indexOf(queuePromise), 1)
     })
   }
 

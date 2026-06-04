@@ -533,7 +533,18 @@ export default class Webtorrent extends WebWorker() {
   }
 
   onInfoHash (torrent, uid, room, cid) {
-    torrent.on('infoHash', () => Webtorrent.#torrentMap.set(torrent.infoHash.toLowerCase(), Promise.resolve({torrent, streamToServerReadyPromise: this.streamToServerReadyPromise, uid, room, cid})))
+    torrent.on('infoHash', () => {
+      const infoHash = torrent.infoHash.toLowerCase()
+      Webtorrent.#torrentMap.set(infoHash, Promise.resolve({torrent, streamToServerReadyPromise: this.streamToServerReadyPromise, uid, room, cid}))
+      this.dispatchEvent(new CustomEvent(`${this.namespace}${infoHash}`, {
+        detail: {
+          infoHash
+        },
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      }))
+    })
   }
 
   onReady (torrent, uid, room, cid, self) {
