@@ -60,7 +60,7 @@ export default class Webtorrent extends Intersection() {
         // stop cycle after 10 and reaching status 3
         if (errorCounter < 10 || errorCounterStatus === 3) {
           this.setAttribute('error', '')
-          this.renderTorrent(errorCounterStatus === 1 || errorCounterStatus === 2 ? true : false, errorCounterStatus === 3 ? true : false, (errorCounterStatus === 0 && this.wasStreaming && initTimestamp + stillScrollAfter > Date.now())).then(() => {
+          this.renderTorrent(errorCounterStatus === 1 || errorCounterStatus === 2 ? true : false, errorCounterStatus === 3 ? true : false, (errorCounterStatus === 0 && initTimestamp + stillScrollAfter > Date.now())).then(() => {
             if (errorCounterStatus < 2) this.removeAttribute('error')
             this.dispatchEvent(new CustomEvent(`${this.namespace}view-file-error`, {
               detail: {
@@ -136,6 +136,7 @@ export default class Webtorrent extends Intersection() {
     if (this.shouldRenderCSS()) showPromises.push(this.renderCSS())
     if (this.shouldRenderHTML()) showPromises.push(this.renderHTML())
     Promise.all(showPromises).then(() => (this.hidden = false))
+    this.details.addEventListener('toggle', this.detailsToggleEventListener)
     this.resetLink.addEventListener('click', this.resetLinkEventListener)
     self.addEventListener('resize', this.resizeEventListener)
     document.body.addEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
@@ -228,6 +229,7 @@ export default class Webtorrent extends Intersection() {
       :host {
         display: block;
         white-space: normal;
+        min-height: var(--view-min-height, 0);
       }
       :host > details {
         display: flex;
@@ -325,7 +327,7 @@ export default class Webtorrent extends Intersection() {
     this.renderTorrentQueue.push(queuePromise)
     await queuePromiseAll
     // reset previous render
-    await this.updateHeight()
+    if (keepScroll) await this.updateHeight()
     // clear previous torrent media elements
     this.webtorrentTargetElements.forEach(({renderTarget, appendTarget, figureTarget}) => {
       renderTarget.remove()
@@ -400,16 +402,7 @@ export default class Webtorrent extends Intersection() {
         clearInterval(this.intervalID)
       }
       const tagName = forceRenderToLink ? 'a' : ''
-      let streamDoneTimeoutId
-      const streamOrDoneFunc = () => {
-        activityFunc()
-        clearTimeout(streamDoneTimeoutId)
-        streamDoneTimeoutId = setTimeout(() => {
-          this.updateHeight()
-          this.removeAttribute('updating')
-          this.details.addEventListener('toggle', this.detailsToggleEventListener)
-        }, 200)
-      }
+      const streamOrDoneFunc = () => activityFunc()
       const renderFiles = async () => {
         let file
         if ((file = torrent.files.find(file => file.name === this.getAttribute('file-name')))) {
@@ -418,7 +411,7 @@ export default class Webtorrent extends Intersection() {
           this.webtorrentTargetElements = this.webtorrentTargetElements.concat(await this.renderFilesTo(torrent, this, this.summary, streamToServerReadyPromise, tagName, streamOrDoneFunc))
         }
         this.webtorrentTargetElements.forEach(({renderTarget}) => {
-          renderTarget.addEventListener(['audio', 'video'].includes(renderTarget.tagName.toLowerCase()) ? 'loadeddata' : 'loadstart', event => {
+          renderTarget.addEventListener(['audio', 'video'].includes(renderTarget.tagName.toLowerCase()) ? 'loadeddata' : 'load', event => {
             this.updateHeight()
             this.removeAttribute('updating')
             if (keepScroll) this.dispatchEvent(new CustomEvent(`${this.namespace}load`, {
