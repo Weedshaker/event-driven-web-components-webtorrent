@@ -237,24 +237,26 @@ export default class Webtorrent extends Intersection() {
       :host([has-height]:not([intersecting])) > details {
         display: none;
       }
-      :host > details > #controls {
-        display: flex;
-        gap: 1em;
-      }
-      :host > details > #controls > #progress {
-        flex: 1;
-        display: flex;
+      :host > details > #content > #controls, :host > details > #content > #progress {
         align-items: center;
+        display: flex;
         gap: 1em;
+        justify-content: end;
       }
-      :host > details > #controls > #progress > #progress-bar {
+      :host > details > #content > #controls > a {
+        line-height: 0.5em;
+      }
+      :host > details > #content > #progress {
+        justify-content: space-between;
+      }
+      :host > details > #content > #progress > #progress-bar {
         flex: 1;
         display: flex;
       }
-      :host > details > #controls > #progress > #progress-bar > progress {
+      :host > details > #content > #progress > #progress-bar > progress {
         min-width: 100%;
       }
-      :host > details > #controls > #progress > :where(#progress-text, #peers) {
+      :host > details > #content > #progress > :where(#progress-text, #peers) {
         flex-shrink: 0;
       }
       @media only screen and (max-width: _max-width_) {
@@ -288,14 +290,17 @@ export default class Webtorrent extends Intersection() {
         <summary>
           <div id=file-name></div>
         </summary>
-        <a id=error-link><slot name=error></slot></a>
-        <div id=controls>
+        <div id=content>
+          <a id=error-link><slot name=error></slot></a>
           <div id=progress>
             <div id=progress-bar></div>
             <div id=progress-text></div>
             <div id=peers></div>
           </div>
-          <a id=reset-link><slot name=reset></slot></a>
+          <div id=controls>
+            <a id=reset-link><slot name=reset></slot></a>
+            <a id=trash-link><slot name=trash></slot></a>
+          </div>
         </div>
       </details>
     `
@@ -320,7 +325,7 @@ export default class Webtorrent extends Intersection() {
     this.renderTorrentQueue.push(queuePromise)
     await queuePromiseAll
     // reset previous render
-    if (resetTorrent || forceRenderToLink) await this.updateHeight()
+    await this.updateHeight()
     // clear previous torrent media elements
     this.webtorrentTargetElements.forEach(({renderTarget, appendTarget, figureTarget}) => {
       renderTarget.remove()

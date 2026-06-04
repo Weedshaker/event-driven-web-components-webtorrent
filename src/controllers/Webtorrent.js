@@ -7,6 +7,7 @@ import { WebWorker } from '../event-driven-web-components-prototypes/src/WebWork
 /**
  * @typedef {{
  *  self: boolean,
+ *  deleted: boolean,
  *  room: string,
  *  cid?: string,
  *  torrentFile: never[],
@@ -545,7 +546,7 @@ export default class Webtorrent extends WebWorker() {
   }
 
   // NOTE: This function must run in a webworker, otherwise getFileHandle does not have the function: createSyncAccessHandle
-  static async saveTorrentFile (infoHash, torrentFile, href, uid, room, cid, self = false) {
+  static async saveTorrentFile (infoHash, torrentFile, href, uid, room, cid, self = false, deleted = false) {
     /** @type {FileSystemDirectoryHandle} */
     const opfsTorrents = await navigator.storage.getDirectory().then(opfsRoot => opfsRoot.getDirectoryHandle('torrents', { create: true }))
     // @ts-ignore
@@ -562,9 +563,10 @@ export default class Webtorrent extends WebWorker() {
       torrentContainers = {}
     }
     torrentContainers = {
-      self: torrentContainers.self ? torrentContainers.self : self,
-      room: torrentContainers.room ? torrentContainers.room : room,
-      cid: torrentContainers.cid ? torrentContainers.cid : cid,
+      self: torrentContainers.self === undefined ? self : torrentContainers.self,
+      deleted: torrentContainers.deleted === undefined ? deleted : torrentContainers.deleted,
+      room: torrentContainers.room === undefined ? room : torrentContainers.room,
+      cid: torrentContainers.cid === undefined ? cid : torrentContainers.cid,
       torrentFile: Array.from(torrentFile),
       added: [{
         timestamp: Date.now(),

@@ -127,7 +127,7 @@ export default class Ipfs extends HTMLElement {
         // https://www.bittorrent.org/beps/bep_0019.html calls a single file .../webtorrent-web-seed/ and multiple .../webtorrent-web-seed/file1/file2
         // so we pass some torrent file data through the addWebSeed url to the service worker
         this.gateways.forEach(gateway => {
-          if (!gateway.hasError && gateway.supports.includes('web-seed')) torrent.addWebSeed(`${gateway.origin}/ipfs/files-metadata/${encodeURIComponent(JSON.stringify(filesCidMetadata))}/webtorrent-web-seed/`)
+          if (!gateway.hasError && gateway.supports.includes('web-seed') && !torrent.destroyed) torrent.addWebSeed(`${gateway.origin}/ipfs/files-metadata/${encodeURIComponent(JSON.stringify(filesCidMetadata))}/webtorrent-web-seed/`)
         })
       }
       // cat/fetch the filesMetadata from IPFS
