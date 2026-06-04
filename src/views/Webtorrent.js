@@ -102,10 +102,14 @@ export default class Webtorrent extends Intersection() {
       if (!this.hasAttribute('updating')) this.updateHeight()
     }
 
+    let resetCounter = 0
     this.resetLinkEventListener = event => {
       event.preventDefault()
       event.stopPropagation()
-      this.renderTorrent(true)
+      this.renderTorrent(resetCounter > 0
+        ? true
+        : false
+      )
       this.dispatchEvent(new CustomEvent(`${this.namespace}view-reset-link-click`, {
         detail: {
           torrentId: this.torrentId
@@ -114,6 +118,7 @@ export default class Webtorrent extends Intersection() {
         cancelable: true,
         composed: true
       }))
+      resetCounter++
     }
 
     this.webtorrentDidResetEventListener = event => {
