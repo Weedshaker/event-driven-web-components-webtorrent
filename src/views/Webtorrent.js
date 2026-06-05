@@ -494,11 +494,11 @@ export default class Webtorrent extends Intersection() {
               detail: {
                 resolve,
                 encrypted: {
-                  text: file,
+                  text: file, // must be file here, since the range for the stream is going to be calculated by crypto
                   iv: new Uint8Array(iv.split(',')),
                   name: 'wormhole-crypto',
                   key: keyContainer.key.epoch,
-                  start,
+                  start: start ? start : 0,
                   length: end ? end - start + 1 : file.length - 1,
                   fileLength: file.length
                 },
@@ -578,7 +578,7 @@ export default class Webtorrent extends Intersection() {
         detail: {
           resolve,
           encrypted: {
-            text: file,
+            text: file.stream(),
             // @ts-ignore
             iv: new Uint8Array(this.iv.split(',')),
             name: 'wormhole-crypto',
