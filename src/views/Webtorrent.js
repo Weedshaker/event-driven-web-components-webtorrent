@@ -389,7 +389,7 @@ export default class Webtorrent extends Intersection() {
             return this.renderTorrent()
           }
           // is torrent stalled
-          if (!torrent.done && (lastActivity + this.stallTimeout) < Date.now() && torrent.numPeers > 0 && !torrent.downloadSpeed && !torrent.uploadSpeed) {
+          if (!torrent.done && !torrent.paused && (lastActivity + this.stallTimeout) < Date.now() && torrent.numPeers > 0 && !torrent.downloadSpeed && !torrent.uploadSpeed) {
             this.dispatchEvent(new CustomEvent(`${this.namespace}view-is-stalled`, {
               detail: {
                 torrent,
