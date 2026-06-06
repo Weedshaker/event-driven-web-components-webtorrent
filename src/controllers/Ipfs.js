@@ -102,8 +102,14 @@ export default class Ipfs extends HTMLElement {
         }
       ]
       : []
-    // @ts-ignore
-    if (this.getAttribute('preset-gateways') && typeof this.getAttribute('preset-gateways') === 'string') this.gateways = JSON.parse(this.getAttribute('preset-gateways'))
+      if (this.getAttribute('preset-gateways') && typeof this.getAttribute('preset-gateways') === 'string') {
+        try {
+          // @ts-ignore
+          this.gateways = JSON.parse(this.getAttribute('preset-gateways'))
+        } catch (error) {
+          console.warn('passed preset-gateways are not valid json')
+        }
+    }
     // @ts-ignore
     if (Environment?.ipfsGateways) this.gateways = Environment.ipfsGateways.concat(this.gateways)
     this.cidVersion = 0
@@ -131,7 +137,7 @@ export default class Ipfs extends HTMLElement {
         })
       }
       // cat/fetch the filesMetadata from IPFS
-      const fileListText = await this.catCidToText(event.detail.cid)
+      const fileListText = await this.catCidToText(event.detail.cid, true)
       let filesCidMetadata
       if (fileListText && (filesCidMetadata = filterFileMetadata(fileListText))) {
         addWebSeedFunc(event.detail.torrent, filesCidMetadata)
@@ -150,9 +156,15 @@ export default class Ipfs extends HTMLElement {
 
     // client.cat
     this.ipfsCatEventListener = async event => {
-      const fileListText = await this.catCidToText(event.detail.cid)
+      const fileListText = await this.catCidToText(event.detail.cid, true)
       if (!fileListText) return null
-      this.respond(event.detail.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}catted`, {files: await Promise.all(JSON.parse(fileListText).filter(entry => entry.type !== 'application/x-bittorrent').map(entry => this.catCidToFile(entry.cid, entry.name, entry.type)))})
+      let fileList
+      try {
+        fileList = JSON.parse(fileListText)
+      } catch (error) {
+        return null
+      }
+      this.respond(event.detail.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}catted`, {files: await Promise.all(fileList.filter(entry => entry.type !== 'application/x-bittorrent').map(entry => this.catCidToFile(entry.cid, entry.name, entry.type)))})
     }
 
     // client.addAll
@@ -357,9 +369,14 @@ export default class Ipfs extends HTMLElement {
    * @returns {Promise<File | null>}
    */
   async getTorrentFile (cid) {
-    const fileListText = await this.catCidToText(cid)
+    const fileListText = await this.catCidToText(cid, true)
     if (!fileListText) return null
-    const json = JSON.parse(fileListText)
+    let json
+    try {
+      json = JSON.parse(fileListText)
+    } catch (error) {
+      return null
+    }
     const torrentFileEntry = json.find(entry => entry.type === 'application/x-bittorrent')
     return torrentFileEntry?.cid ? this.catCidToFile(torrentFileEntry.cid, torrentFileEntry.name, torrentFileEntry.type) : null
   }
@@ -368,9 +385,10 @@ export default class Ipfs extends HTMLElement {
    * client.cat file from ipfs to text
    * 
    * @param {string} cid
+   * @param {boolean} [isJson=false]
    * @returns {Promise<string|null>}
    */
-  catCidToText (cid) {
+  catCidToText (cid, isJson = false) {
     const decodeText = chunks => {
       const decoder = new TextDecoder()
       return chunks.reduce((text, chunk) => (text += decoder.decode(chunk, { stream: true })), '') + decoder.decode()
@@ -389,17 +407,41 @@ export default class Ipfs extends HTMLElement {
           }
         }
       }
-      let {chunks: catChunksPromise, getAbortController: catGetAbortController} = this.cat(cid)
-      let {response: fetchResponsePromise, getAbortController: fetchGetAbortController} = this.fetch(cid)
-      catChunksPromise.then(chunks => {
-        if (!chunks) return doResolve(null)
+      let {result: catChunksPromise, getAbortController: catGetAbortController} = this.cat(cid)
+      let {result: fetchResponsePromise, getAbortController: fetchGetAbortController} = this.fetch(cid)
+      catChunksPromise.then(({chunks, gateway, isAbortError}) => {
+        const doResolveNull = () => {
+          if (!isAbortError && gateway) gateway.hasError = true
+          return doResolve(null)
+        }
+        if (!chunks) return doResolveNull()
+        const text = decodeText(chunks)
+        if (isJson) {
+          try {
+            JSON.parse(text)
+          } catch (error) {
+            return doResolveNull()
+          }
+        }
         fetchGetAbortController().abort()
-        doResolve(decodeText(chunks))
+        doResolve(text)
       })
-      fetchResponsePromise.then(response => {
-        if (!response) return doResolve(null)
+      fetchResponsePromise.then(async ({response, gateway, isAbortError}) => {
+        const doResolveNull = () => {
+          if (!isAbortError && gateway) gateway.hasError = true
+          return doResolve(null)
+        }
+        if (!response) return doResolveNull()
+        const text = await response.text()
+        if (isJson) {
+          try {
+            JSON.parse(text)
+          } catch (error) {
+            return doResolveNull()
+          }
+        }
         catGetAbortController().abort()
-        doResolve(response.text())
+        doResolve(text)
       })
     })
   }
@@ -436,15 +478,23 @@ export default class Ipfs extends HTMLElement {
           }
         }
       }
-      let {chunks: catChunksPromise, getAbortController: catGetAbortController} = this.cat(cid)
-      let {response: fetchResponsePromise, getAbortController: fetchGetAbortController} = this.fetch(cid)
-      catChunksPromise.then(chunks => {
-        if (!chunks) return doResolve(null)
+      let {result: catChunksPromise, getAbortController: catGetAbortController} = this.cat(cid)
+      let {result: fetchResponsePromise, getAbortController: fetchGetAbortController} = this.fetch(cid)
+      catChunksPromise.then(({chunks, gateway, isAbortError}) => {
+        const doResolveNull = () => {
+          if (!isAbortError && gateway) gateway.hasError = true
+          return doResolve(null)
+        }
+        if (!chunks) return doResolveNull()
         fetchGetAbortController().abort()
         doResolve(getFile(chunks, name, type))
       })
-      fetchResponsePromise.then(async response => {
-        if (!response) return doResolve(null)
+      fetchResponsePromise.then(async ({response, gateway, isAbortError}) => {
+        const doResolveNull = () => {
+          if (!isAbortError && gateway) gateway.hasError = true
+          return doResolve(null)
+        }
+        if (!response) return doResolveNull()
         catGetAbortController().abort()
         doResolve(getFile([await response.blob()], name, type))
       })
@@ -455,7 +505,7 @@ export default class Ipfs extends HTMLElement {
    * cat resp. download through ipfs client
    * 
    * @param {string} cid
-   * @returns {{chunks: Promise<any[]|null>, getAbortController: () => AbortController}}
+   * @returns {{result: Promise<{chunks: any[]|null, gateway:GATEWAY|null, isAbortError?:boolean}>, getAbortController: () => AbortController}}
    */
   cat (cid) {
     let abortController = new AbortController()
@@ -469,34 +519,34 @@ export default class Ipfs extends HTMLElement {
             chunks.push(chunk)
           }
           gatewayResult.gateway.hasError = false
-          return chunks
+          return {chunks, gateway: gatewayResult.gateway}
         } catch (error) {
           if (error.name === 'AbortError') {
-            return null
+            return {chunks: null, gateway: gatewayResult.gateway, isAbortError: true}
           } else {
             gatewayResult.gateway.hasError = true
             if (!gatewayResult.ignoreError) {
               const catResult = this.cat(cid)
               abortController = catResult.getAbortController()
-              return catResult.chunks
+              return catResult.result
             } else {
-              return null
+              return {chunks: null, gateway: gatewayResult.gateway}
             }
           }
         }
       } else {
         console.warn('No more viable gateways...', this.gateways)
-        return null
+        return {chunks: null, gateway: null}
       }
     }
-    return {chunks: this.resolveWhenOnline(func), getAbortController: () => abortController}
+    return {result: this.resolveWhenOnline(func), getAbortController: () => abortController}
   }
 
   /**
    * fetch resp. download through ipfs client
    * 
    * @param {string} cid
-   * @returns {{response: Promise<Response|null>, getAbortController: () => AbortController}}
+   * @returns {{result: Promise<{response: Response|null, gateway:GATEWAY|null, isAbortError?:boolean}>, getAbortController: () => AbortController}}
    */
   fetch (cid) {
     let abortController = new AbortController()
@@ -506,24 +556,29 @@ export default class Ipfs extends HTMLElement {
         return fetch(`${gatewayResult.gateway.origin}/ipfs/${cid}`, {signal: abortController.signal}).then(response => {
           // @ts-ignore
           gatewayResult.gateway.hasError = false
-          return response
-        }).catch(error => {
+          return {response, gateway: gatewayResult.gateway}
           // @ts-ignore
-          gatewayResult.gateway.hasError = true
-          if (!gatewayResult.ignoreError) {
-            const fetchResult = this.fetch(cid)
-            abortController = fetchResult.getAbortController()
-            return fetchResult.response
+        }).catch(error => {
+          if (error.name === 'AbortError') {
+            return {response: null, gateway: gatewayResult.gateway, isAbortError: true}
           } else {
-            return null
+            // @ts-ignore
+            gatewayResult.gateway.hasError = true
+            if (!gatewayResult.ignoreError) {
+              const fetchResult = this.fetch(cid)
+              abortController = fetchResult.getAbortController()
+              return fetchResult.result
+            } else {
+              return {response: null, gateway: gatewayResult.gateway}
+            }
           }
         })
       } else {
         console.warn('No more viable gateways...', this.gateways)
-        return Promise.resolve(null)
+        return Promise.resolve({response: null, gateway: null})
       }
     }
-    return {response: this.resolveWhenOnline(func), getAbortController: () => abortController}
+    return {result: this.resolveWhenOnline(func), getAbortController: () => abortController}
   }
 
   /**
