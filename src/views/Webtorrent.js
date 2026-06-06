@@ -26,6 +26,7 @@ export default class Webtorrent extends Intersection() {
     const torrentIdUrl = new URL(this.torrentId)
     this.keyEpoch = torrentIdUrl.searchParams.get('key-epoch')
     this.iv = torrentIdUrl.searchParams.get('iv')
+    this.fileName = torrentIdUrl.searchParams.get('dn')
     let xt
     if ((xt = torrentIdUrl.searchParams.get('xt'))) this.infoHash = xt.replace('urn:btih:', '').toLowerCase()
     /** @type {{renderTarget, appendTarget, figureTarget, file, tagName}[]} */
@@ -353,6 +354,7 @@ export default class Webtorrent extends Intersection() {
     const {appendTarget: progressTarget, renderTarget: progressElement} = Webtorrent.getElement(this, 'progress', 'initializing...', 'progress', false)
     progressTarget.setAttribute('max', '100')
     this.progressBar.appendChild(progressTarget)
+    this.fileNameEl.textContent = this.fileName
     // get torrent
     return new Promise((resolve, reject) => {
       this.renderReject = reject
