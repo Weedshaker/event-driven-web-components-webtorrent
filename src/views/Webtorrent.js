@@ -33,6 +33,9 @@ export default class Webtorrent extends Intersection() {
     this.webtorrentTargetElements = []
     this.renderReject = null
     const initTimestamp = Date.now()
+
+    this.mediaResumeMap = new Map()
+    this.mediaResumeMaxTimeout = 2000
     
     this.stallTimeout = 10000
     const stillScrollAfter = 3000
@@ -87,7 +90,7 @@ export default class Webtorrent extends Intersection() {
       const promise = new Promise(resolve => (promiseResolve = resolve))
       this.removeAttribute('has-height')
       this.customStyleHeight.textContent = ''
-      self.requestAnimationFrame(timeStamp => {
+      self.requestAnimationFrame(timestamp => {
         this.customStyleHeight.textContent = /* css */`
           :host([has-height]:not([intersecting])), :host([has-height][error]) > details, :host([has-height][updating]) > details {
             min-height: ${this.offsetHeight}px;
@@ -426,7 +429,7 @@ export default class Webtorrent extends Intersection() {
           this.webtorrentTargetElements = this.webtorrentTargetElements.concat(await this.renderFilesTo(torrent, this, this.summary, streamToServerReadyPromise, tagName, streamOrDoneFunc))
         }
         this.webtorrentTargetElements.forEach(({renderTarget}) => {
-          renderTarget.addEventListener(['audio', 'video'].includes(renderTarget.tagName.toLowerCase()) ? 'loadeddata' : 'load', event => {
+          const loadedEventListener = event => {
             this.updateHeight()
             this.removeAttribute('updating')
             if (keepScroll) this.dispatchEvent(new CustomEvent(`${this.namespace}load`, {
@@ -438,7 +441,27 @@ export default class Webtorrent extends Intersection() {
               cancelable: true,
               composed: true
             }))
-          })
+          }
+          if (['audio', 'video'].includes(renderTarget.tagName.toLowerCase())) {
+            renderTarget.addEventListener('loadedmetadata', loadedEventListener)
+            renderTarget.addEventListener('canplay', event => {
+              loadedEventListener()
+              if (!this.hasAttribute('no-media-resume')) {
+                let mediaResumeItem
+                if (mediaResumeItem = this.mediaResumeMap.get(torrent.name)) {
+                  renderTarget.currentTime = mediaResumeItem.currentTime
+                  // resume only if it was playing in less than the this.mediaResumeMaxTimeout before
+                  if (renderTarget.paused && mediaResumeItem.timestamp + this.mediaResumeMaxTimeout > Date.now()) renderTarget.play()
+                }
+              }
+            }, {once: true})
+            if (!this.hasAttribute('no-media-resume')) renderTarget.addEventListener('timeupdate', event => this.mediaResumeMap.set(torrent.name, {
+              currentTime: renderTarget.currentTime,
+              timestamp: Date.now()
+            }))
+          } else {
+            renderTarget.addEventListener('load', loadedEventListener)
+          }
           renderTarget.addEventListener('error', this.fileErrorEventListener)
         })
       }
