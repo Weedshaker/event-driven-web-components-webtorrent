@@ -35,7 +35,7 @@ export default class Webtorrent extends Intersection() {
     const initTimestamp = Date.now()
 
     this.mediaResumeMap = new Map()
-    this.mediaResumeMaxTimeout = 2000
+    this.mediaResumeMaxTimeout = 5000
     
     this.stallTimeout = 10000
     const stillScrollAfter = 3000
