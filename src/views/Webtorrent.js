@@ -373,7 +373,14 @@ export default class Webtorrent extends Intersection() {
         cancelable: true,
         composed: true
       }))
-    }).then(({torrent, streamToServerReadyPromise}) => {
+    }).then(({torrent, streamToServerReadyPromise, error}) => {
+      if (error === 'deleted' || error === 'paused') {
+        // TODO: deleted - render download icon
+        // TODO: paused - render progress-down icon
+        // TODO: checkbox element before progress, analog webtorrent desktop, to pause or resume
+        console.log('*********', 'deleted torrent', this)
+        return
+      }
       torrent.on('error', this.torrentErrorEventListener)
       const doneFunc = () => this.details.removeAttribute('open')
       if (torrent.done) doneFunc()
@@ -443,8 +450,7 @@ export default class Webtorrent extends Intersection() {
             }))
           }
           if (['audio', 'video'].includes(renderTarget.tagName.toLowerCase())) {
-            renderTarget.addEventListener('loadedmetadata', loadedEventListener)
-            renderTarget.addEventListener('canplay', event => {
+            renderTarget.addEventListener('loadedmetadata', event => {
               loadedEventListener()
               if (!this.hasAttribute('no-media-resume')) {
                 let mediaResumeItem
@@ -454,7 +460,8 @@ export default class Webtorrent extends Intersection() {
                   if (renderTarget.paused && mediaResumeItem.timestamp + this.mediaResumeMaxTimeout > Date.now()) renderTarget.play()
                 }
               }
-            }, {once: true})
+            })
+            renderTarget.addEventListener('canplay', loadedEventListener, {once: true})
             if (!this.hasAttribute('no-media-resume')) renderTarget.addEventListener('timeupdate', event => this.mediaResumeMap.set(torrent.name, {
               currentTime: renderTarget.currentTime,
               timestamp: Date.now()
