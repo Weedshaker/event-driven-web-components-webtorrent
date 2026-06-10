@@ -254,6 +254,28 @@ export default class Webtorrent extends Intersection() {
       :host([has-height]:not([intersecting])) > details {
         display: none;
       }
+      :host > details > summary > figure {
+        margin: 0 0 1em;
+      }
+      :host > details > summary #file-name {
+        border-bottom: 1px solid var(--color-secondary);
+        border-top: 1px solid var(--color-secondary);
+        text-align: center;
+        position: relative;
+        cursor: pointer;
+      }
+      :host > details > summary #file-name::after {
+        background: var(--color-secondary);
+        clip-path: polygon(0 0, 100% 0, 50% 100%);
+        color: var(--color-white);
+        content: 'file info';
+        display: block;
+        font-size: 0.7em;
+        height: 1.75em;
+        position: absolute;
+        right: 30%;
+        width: 40%;
+      }
       :host > details > #content > #controls, :host > details > #content > #progress {
         align-items: center;
         display: flex;
@@ -264,11 +286,20 @@ export default class Webtorrent extends Intersection() {
         line-height: 0.5em;
       }
       :host > details > #content > #progress {
+        padding-top: 1em;
         justify-content: space-between;
+        align-items: flex-end;
+      }
+      :host > details > #content > #progress > #pause {
+        width: 2em;
+        height: 2em;
+        margin: 0;
+        cursor: pointer;
       }
       :host > details > #content > #progress > #progress-bar {
         flex: 1;
         display: flex;
+        align-self: center;
       }
       :host > details > #content > #progress > #progress-bar > progress {
         min-width: 100%;
@@ -310,13 +341,14 @@ export default class Webtorrent extends Intersection() {
         <div id=content>
           <a id=error-link><slot name=error></slot></a>
           <div id=progress>
+            <input style="display: none;" title="pause or resume torrent" id=pause type=checkbox checked /><!-- TODO: capture click/change and stop click propagation, slot -->
             <div id=progress-bar></div>
             <div id=progress-text></div>
             <div id=peers></div>
           </div>
           <div id=controls>
+            <a  style="display: none;" id=pin-link><slot name=pin></slot></a>
             <a id=reset-link><slot name=reset></slot></a>
-            <a id=trash-link><slot name=trash></slot></a>
           </div>
         </div>
       </details>

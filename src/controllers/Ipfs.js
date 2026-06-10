@@ -14,6 +14,7 @@ import '../ipfs/ipfs-unixfs-importer@17.0.1/dist/index.min.js'
  *  origin: string,
  *  supports: ('add'|'cat'|'web-seed'|'fetch')[],
  *  hasError?: boolean,
+ *  hasAddError?: boolean,
  *  client?: any
  * }} GATEWAY
  */
@@ -62,7 +63,7 @@ export default class Ipfs extends HTMLElement {
         },
         {
           origin: 'https://cdn.ipfsscan.io',
-          supports: ['add', 'web-seed', 'fetch']
+          supports: ['web-seed', 'fetch']
         },
         {
           origin: 'https://ipfs.decentralized-content.com',
@@ -112,6 +113,19 @@ export default class Ipfs extends HTMLElement {
     }
     // @ts-ignore
     if (Environment?.ipfsGateways) this.gateways = Environment.ipfsGateways.concat(this.gateways)
+    // can be async aka. lazy, is faster than the next request but even if not, it is not crucial, since this only loads if a gateway every hadError or hadAddError
+    const gatewayOrigins = []
+    this.loadGateways().then(result => (this.gateways = this.gateways.filter(gateway => {
+      if (gatewayOrigins.includes(gateway.origin)) return false
+      gatewayOrigins.push(gateway.origin)
+      return true
+    }).map(gateway => {
+      let loadedGateway
+      if (loadedGateway = result.value.find(loadedGateway => gateway.origin === loadedGateway.origin)) {
+        return Object.assign(loadedGateway, gateway)
+      }
+      return gateway
+    })))
     this.cidVersion = 0
     this.rawLeaves = false
     this.clientRpcVersion = `/api/v${this.cidVersion}`
@@ -186,7 +200,10 @@ export default class Ipfs extends HTMLElement {
 
     this.ipfsGetTorrentFileEventListener = async event => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}torrent-file`, {cid: event.detail.cid, torrentFile: await this.getTorrentFile(event.detail.cid)})
 
-    this.onlineEventListener = event => this.gateways.forEach(gateway => (gateway.hasError = false))
+    this.onlineEventListener = event => this.gateways.forEach(gateway => {
+      gateway.hasError = false
+      gateway.hasAddError = false
+    })
   }
 
   connectedCallback () {
@@ -411,7 +428,10 @@ export default class Ipfs extends HTMLElement {
       let {result: fetchResponsePromise, getAbortController: fetchGetAbortController} = this.fetch(cid)
       catChunksPromise.then(({chunks, gateway, isAbortError}) => {
         const doResolveNull = () => {
-          if (!isAbortError && gateway) gateway.hasError = true
+          if (!isAbortError && gateway) {
+            gateway.hasError = true
+            this.saveGateways()
+          }
           return doResolve(null)
         }
         if (!chunks) return doResolveNull()
@@ -428,7 +448,10 @@ export default class Ipfs extends HTMLElement {
       })
       fetchResponsePromise.then(async ({response, gateway, isAbortError}) => {
         const doResolveNull = () => {
-          if (!isAbortError && gateway) gateway.hasError = true
+          if (!isAbortError && gateway) {
+            gateway.hasError = true
+            this.saveGateways()
+          }
           return doResolve(null)
         }
         if (!response) return doResolveNull()
@@ -482,7 +505,10 @@ export default class Ipfs extends HTMLElement {
       let {result: fetchResponsePromise, getAbortController: fetchGetAbortController} = this.fetch(cid)
       catChunksPromise.then(({chunks, gateway, isAbortError}) => {
         const doResolveNull = () => {
-          if (!isAbortError && gateway) gateway.hasError = true
+          if (!isAbortError && gateway) {
+            gateway.hasError = true
+            this.saveGateways()
+          }
           return doResolve(null)
         }
         if (!chunks) return doResolveNull()
@@ -491,7 +517,10 @@ export default class Ipfs extends HTMLElement {
       })
       fetchResponsePromise.then(async ({response, gateway, isAbortError}) => {
         const doResolveNull = () => {
-          if (!isAbortError && gateway) gateway.hasError = true
+          if (!isAbortError && gateway) {
+            gateway.hasError = true
+            this.saveGateways()
+          }
           return doResolve(null)
         }
         if (!response) return doResolveNull()
@@ -519,12 +548,14 @@ export default class Ipfs extends HTMLElement {
             chunks.push(chunk)
           }
           gatewayResult.gateway.hasError = false
+          this.saveGateways()
           return {chunks, gateway: gatewayResult.gateway}
         } catch (error) {
           if (error.name === 'AbortError') {
             return {chunks: null, gateway: gatewayResult.gateway, isAbortError: true}
           } else {
             gatewayResult.gateway.hasError = true
+            this.saveGateways()
             if (!gatewayResult.ignoreError) {
               const catResult = this.cat(cid)
               abortController = catResult.getAbortController()
@@ -556,6 +587,7 @@ export default class Ipfs extends HTMLElement {
         return fetch(`${gatewayResult.gateway.origin}/ipfs/${cid}`, {signal: abortController.signal}).then(response => {
           // @ts-ignore
           gatewayResult.gateway.hasError = false
+          this.saveGateways()
           return {response, gateway: gatewayResult.gateway}
           // @ts-ignore
         }).catch(error => {
@@ -564,6 +596,7 @@ export default class Ipfs extends HTMLElement {
           } else {
             // @ts-ignore
             gatewayResult.gateway.hasError = true
+            this.saveGateways()
             if (!gatewayResult.ignoreError) {
               const fetchResult = this.fetch(cid)
               abortController = fetchResult.getAbortController()
@@ -613,17 +646,25 @@ export default class Ipfs extends HTMLElement {
       if (gatewayResult.gateway?.client) {
         const client = gatewayResult.gateway.client
         try {
-          return await client.add(file, {
+          const result = await client.add(file, {
             pin: true,
             cidVersion: this.cidVersion,
             rawLeaves: this.rawLeaves,
-            wrapWithDirectory: false
+            wrapWithDirectory: false,
+            timeout: 10000
           })
+          // TODO: when doing input add dialog... add progress function as property in the add options, to track how much is added
+          // TODO: progress - function - undefined - Called with (bytes, path) as bytes are added
+          // TODO: input add dialog listen to client.add error 413 Request Entity Too Large to propose alternative gateway
+          gatewayResult.gateway.hasAddError = false
+          this.saveGateways()
+          return result
         } catch (error) {
           if (error.name === 'AbortError') {
             return createFileCid(file)
           } else {
-            gatewayResult.gateway.hasError = true
+            gatewayResult.gateway.hasAddError = true
+            this.saveGateways()
             if (!gatewayResult.ignoreError) {
               const addResult = this.add(file)
               abortController = addResult.getAbortController()
@@ -651,11 +692,14 @@ export default class Ipfs extends HTMLElement {
    */
   getGateway (usage, ignoreError = false) {
     const gateway = this.gateways.find(gateway => {
-      if (!ignoreError && gateway.hasError) return false
+      if (!ignoreError && usage === 'add' ? gateway.hasAddError : gateway.hasError) return false
       if (!gateway.supports.includes(usage)) return false
       // KuboRpcClient is only used for add and cat
       // @ts-ignore
-      if (!gateway.client && ['add', 'cat'].includes(usage)) gateway.client = KuboRpcClient.create({url: `${gateway.origin}${this.clientRpcVersion}`})
+      if (!gateway.client && ['add', 'cat'].includes(usage)) gateway.client = KuboRpcClient.create({
+        url: `${gateway.origin}${this.clientRpcVersion}`,
+        timeout: 10000
+      })
       return true
     })
     return gateway
@@ -663,6 +707,33 @@ export default class Ipfs extends HTMLElement {
       : ignoreError
         ? {gateway: null, ignoreError}
         : this.getGateway(usage, true)
+  }
+
+  saveGateways () {
+    this.dispatchEvent(new CustomEvent('storage-set', {
+      detail: {
+        key: `${this.namespace}gateways`,
+        value: this.gateways.map(gateway => {
+          if (gateway.client) delete gateway.client
+          return gateway
+        })
+      },
+      bubbles: true,
+      cancelable: true,
+      composed: true
+    }))
+  }
+
+  loadGateways () {
+    return new Promise(resolve => this.dispatchEvent(new CustomEvent('storage-get', {
+      detail: {
+        key: `${this.namespace}gateways`,
+        resolve
+      },
+      bubbles: true,
+      cancelable: true,
+      composed: true
+    })))
   }
 
   /**
