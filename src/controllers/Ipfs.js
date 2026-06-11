@@ -121,7 +121,7 @@ export default class Ipfs extends HTMLElement {
       return true
     }).map(gateway => {
       let loadedGateway
-      if (loadedGateway = result.value.find(loadedGateway => gateway.origin === loadedGateway.origin)) {
+      if (Array.isArray(result.value) && (loadedGateway = result.value.find(loadedGateway => gateway.origin === loadedGateway.origin))) {
         return Object.assign(loadedGateway, gateway)
       }
       return gateway
@@ -263,7 +263,6 @@ export default class Ipfs extends HTMLElement {
    * @returns {Promise<string>} // returns the filesCidMetadata cid
    */
   async addAll (inputFiles, torrent) {
-    const client = this.getGateway('add').gateway?.client
     const filesCidMetadata = []
     // upload files and collect metadata
     await Promise.all(Ipfs.createFileListArray(inputFiles, torrent).map(async (file, i) => {
@@ -310,7 +309,16 @@ export default class Ipfs extends HTMLElement {
     const filesCidMetadata = []
     await Promise.all(Ipfs.createFileListArray(inputFiles, torrent).map(async (file, i) => {
       // @ts-ignore
-      for await (const result of IpfsUnixfsImporter.importer([file], blockstore, {
+      for await (const result of IpfsUnixfsImporter.importer([
+        file instanceof File
+          ? {
+            path: file.name,
+            get content () {
+              return file.stream()
+            }
+          }
+          : file
+      ], blockstore, {
         cidVersion: this.cidVersion,
         rawLeaves: this.rawLeaves,
         wrapWithDirectory: false
@@ -632,7 +640,16 @@ export default class Ipfs extends HTMLElement {
         // @ts-ignore
         const blockstore = new BlockstoreCore.MemoryBlockstore()
         // @ts-ignore
-        for await (const result of IpfsUnixfsImporter.importer([file], blockstore, {
+        for await (const result of IpfsUnixfsImporter.importer([
+          file instanceof File
+            ? {
+              path: file.name,
+              get content () {
+                return file.stream()
+              }
+            }
+            : file
+          ], blockstore, {
           cidVersion: this.cidVersion,
           rawLeaves: this.rawLeaves,
           wrapWithDirectory: false

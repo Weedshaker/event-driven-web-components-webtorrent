@@ -108,8 +108,10 @@ export default class Webtorrent extends Intersection() {
 
     let resetCounter = 0
     this.resetLinkEventListener = event => {
-      event.preventDefault()
-      event.stopPropagation()
+      if (event) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
       this.renderTorrent(resetCounter > 0
         ? true
         : false
@@ -244,12 +246,12 @@ export default class Webtorrent extends Intersection() {
       :host {
         display: block;
         white-space: normal;
-        min-height: var(--view-min-height, 0);
       }
       :host > details {
         display: flex;
         flex-direction: column;
-        justify-content: space-between;
+        justify-content: flex-end;
+        min-height: var(--view-min-height, 0);
       }
       :host([has-height]:not([intersecting])) > details {
         display: none;
@@ -637,36 +639,40 @@ export default class Webtorrent extends Intersection() {
   }
 
   async getBlob (file, keyContainer) {
-    if (keyContainer) {
-      const decryptedStream = await new Promise(async resolve => this.dispatchEvent(new CustomEvent('yjs-decrypt', {
-        detail: {
-          resolve,
-          encrypted: {
-            text: file.stream(),
-            // @ts-ignore
-            iv: new Uint8Array(this.iv.split(',')),
-            name: 'wormhole-crypto',
-            key: keyContainer.key.epoch
+    try {
+      if (keyContainer) {
+        const decryptedStream = await new Promise(async resolve => this.dispatchEvent(new CustomEvent('yjs-decrypt', {
+          detail: {
+            resolve,
+            encrypted: {
+              text: file.stream(),
+              // @ts-ignore
+              iv: new Uint8Array(this.iv.split(',')),
+              name: 'wormhole-crypto',
+              key: keyContainer.key.epoch
+            },
+            key: keyContainer
           },
-          key: keyContainer
-        },
-        bubbles: true,
-        cancelable: true,
-        composed: true
-      }))).then(result => {
-        if (result) {
-          const { decrypted } = result
-          if (decrypted.error) return null
-          return decrypted.text
-        }
-        return null
-      })
-      if (!decryptedStream) return await file.blob()
-      return await new Response(decryptedStream, {
-        headers: { 'Content-Type': 'application/octet-stream' }
-      }).blob()
-    } else {
-      return await file.blob()
+          bubbles: true,
+          cancelable: true,
+          composed: true
+        }))).then(result => {
+          if (result) {
+            const { decrypted } = result
+            if (decrypted.error) return null
+            return decrypted.text
+          }
+          return null
+        })
+        if (!decryptedStream) return await file.blob()
+        return await new Response(decryptedStream, {
+          headers: { 'Content-Type': 'application/octet-stream' }
+        }).blob()
+      } else {
+        return await file.blob()
+      }
+    } catch (error) {
+      this.resetLinkEventListener()
     }
   }
 
