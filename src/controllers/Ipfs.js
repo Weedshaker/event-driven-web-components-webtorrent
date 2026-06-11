@@ -313,9 +313,7 @@ export default class Ipfs extends HTMLElement {
         file instanceof File
           ? {
             path: file.name,
-            get content () {
-              return file.stream()
-            }
+            content: file
           }
           : file
       ], blockstore, {
@@ -644,9 +642,7 @@ export default class Ipfs extends HTMLElement {
           file instanceof File
             ? {
               path: file.name,
-              get content () {
-                return file.stream()
-              }
+              content: file
             }
             : file
           ], blockstore, {
