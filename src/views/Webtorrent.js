@@ -234,12 +234,16 @@ export default class Webtorrent extends Intersection() {
     this.css = /* css */`
       ::slotted(video), ::slotted(img), :where(video, img) {
         height: auto;
+        max-height: 75dvh;
+        object-fit: scale-down;
       }
       ::slotted(video), ::slotted(audio), ::slotted(img), :where(video, audio, img) {
         width: 100%;
       }
       ::slotted(embed), ::slotted(iframe), :where(embed, iframe) {
         height: auto;
+        max-height: 75dvh;
+        object-fit: scale-down;
         width: 100%;
         aspect-ratio: 4/3;
       }
