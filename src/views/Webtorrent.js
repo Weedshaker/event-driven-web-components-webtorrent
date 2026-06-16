@@ -235,10 +235,12 @@ export default class Webtorrent extends Intersection() {
       ::slotted(video), ::slotted(img), :where(video, img) {
         height: auto;
         max-height: 75dvh;
-        object-fit: scale-down;
       }
       ::slotted(video), ::slotted(audio), ::slotted(img), :where(video, audio, img) {
         width: 100%;
+      }
+      ::slotted(img), img {
+        object-fit: scale-down;
       }
       ::slotted(embed), ::slotted(iframe), :where(embed, iframe) {
         height: auto;
@@ -270,6 +272,9 @@ export default class Webtorrent extends Intersection() {
       }
       :host([has-height]:not([intersecting])) > details {
         display: none;
+      }
+      :host > details > summary::marker {
+        content: "";
       }
       :host > details > summary > figure {
         margin: 0 0 1em;
