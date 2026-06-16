@@ -106,11 +106,20 @@ export default class Webtorrent extends Intersection() {
       if (!this.hasAttribute('updating')) this.updateHeight()
     }
 
+    this.dblclickEventListener = event => {
+      if (event) event.stopPropagation()
+    }
+
     let resetCounter = 0
-    this.resetLinkEventListener = event => {
+    this.resetClickLinkEventListener = event => {
       if (event) {
         event.preventDefault()
         event.stopPropagation()
+      }
+      let assignedElement
+      if (assignedElement = this.resetLink.children[0]?.assignedElements()?.[0]) {
+        assignedElement.addEventListener('transitionend', event => assignedElement.removeAttribute('rotate'), {once: true})
+        assignedElement.setAttribute('rotate', '360deg')
       }
       this.renderTorrent(resetCounter > 0
         ? true
@@ -152,7 +161,8 @@ export default class Webtorrent extends Intersection() {
     if (this.shouldRenderHTML()) showPromises.push(this.renderHTML())
     Promise.all(showPromises).then(() => (this.hidden = false))
     this.details.addEventListener('toggle', this.detailsToggleEventListener)
-    this.resetLink.addEventListener('click', this.resetLinkEventListener)
+    this.addEventListener('dblclick', this.dblclickEventListener)
+    this.resetLink.addEventListener('click', this.resetClickLinkEventListener)
     self.addEventListener('resize', this.resizeEventListener)
     document.body.addEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
     if (this.infoHash) document.body.addEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
@@ -179,7 +189,8 @@ export default class Webtorrent extends Intersection() {
   disconnectedCallback () {
     super.disconnectedCallback()
     this.details.removeEventListener('toggle', this.detailsToggleEventListener)
-    this.resetLink.removeEventListener('click', this.resetLinkEventListener)
+    this.removeEventListener('dblclick', this.dblclickEventListener)
+    this.resetLink.removeEventListener('click', this.resetClickLinkEventListener)
     self.removeEventListener('resize', this.resizeEventListener)
     document.body.removeEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
     if (this.infoHash) document.body.removeEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
@@ -278,17 +289,23 @@ export default class Webtorrent extends Intersection() {
         right: 30%;
         width: 40%;
       }
+      :host > details[open] > summary #file-name::after {
+        clip-path: none;
+        line-height: 1.75em;
+      }
       :host > details > #content > #controls, :host > details > #content > #progress {
         align-items: center;
         display: flex;
         gap: 1em;
         justify-content: end;
       }
+      :host > details > #content > #controls {
+        margin-top: 1.125em;
+      }
       :host > details > #content > #controls > a {
         line-height: 0.5em;
       }
       :host > details > #content > #progress {
-        padding-top: 1em;
         justify-content: space-between;
         align-items: flex-end;
       }
@@ -342,15 +359,15 @@ export default class Webtorrent extends Intersection() {
         </summary>
         <div id=content>
           <a id=error-link><slot name=error></slot></a>
+          <div id=controls>
+            <a  style="display: none;" id=pin-link><slot name=pin></slot></a>
+            <a id=reset-link><slot name=reset></slot></a>
+          </div>
           <div id=progress>
             <input style="display: none;" title="pause or resume torrent" id=pause type=checkbox checked /><!-- TODO: capture click/change and stop click propagation, slot -->
             <div id=progress-bar></div>
             <div id=progress-text></div>
             <div id=peers></div>
-          </div>
-          <div id=controls>
-            <a  style="display: none;" id=pin-link><slot name=pin></slot></a>
-            <a id=reset-link><slot name=reset></slot></a>
           </div>
         </div>
       </details>
@@ -368,7 +385,6 @@ export default class Webtorrent extends Intersection() {
    */
   async renderTorrent (resetTorrent = false, forceRenderToLink = false, keepScroll = false) {
     this.setAttribute('updating', '')
-    this.details.setAttribute('open', '')
     clearInterval(this.intervalID)
     if (this.renderReject) {
       this.renderReject()
@@ -387,11 +403,13 @@ export default class Webtorrent extends Intersection() {
     // clear information elements
     this.summary.innerHTML = '<div id=file-name></div>'
     Array.from(this.progress.children).forEach(child => (child.innerHTML = ''))
+    this.resetLink.children[0]?.assignedElements()?.[0].removeAttribute('rotate')
     // set new elements
     const {appendTarget: progressTarget, renderTarget: progressElement} = Webtorrent.getElement(this, 'progress', 'initializing...', 'progress', false)
     progressTarget.setAttribute('max', '100')
     this.progressBar.appendChild(progressTarget)
     this.fileNameEl.textContent = this.fileName
+    this.details.setAttribute('open', '')
     // get torrent
     return new Promise((resolve, reject) => {
       this.renderReject = reject
@@ -672,7 +690,7 @@ export default class Webtorrent extends Intersection() {
         return await file.blob()
       }
     } catch (error) {
-      this.resetLinkEventListener()
+      this.resetClickLinkEventListener()
     }
   }
 
