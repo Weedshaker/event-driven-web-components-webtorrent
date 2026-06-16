@@ -705,7 +705,7 @@ export default class Ipfs extends HTMLElement {
    */
   getGateway (usage, ignoreError = false) {
     const gateway = this.gateways.find(gateway => {
-      if (!ignoreError && usage === 'add' ? gateway.hasAddError : gateway.hasError) return false
+      if (!ignoreError && (usage === 'add' ? gateway.hasAddError : gateway.hasError)) return false
       if (!gateway.supports.includes(usage)) return false
       // KuboRpcClient is only used for add and cat
       // @ts-ignore
