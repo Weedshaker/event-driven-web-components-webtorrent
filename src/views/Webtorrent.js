@@ -290,7 +290,7 @@ export default class Webtorrent extends Intersection() {
         background: var(--color-secondary);
         clip-path: polygon(0 0, 100% 0, 50% 100%);
         color: var(--color-white);
-        content: 'file info';
+        content: attr(content, 'file info');
         display: block;
         font-size: 0.7em;
         height: 1.75em;
@@ -299,6 +299,7 @@ export default class Webtorrent extends Intersection() {
         width: 40%;
       }
       :host > details[open] > summary #file-name::after {
+        content: attr(content-open, 'file info');
         clip-path: none;
         line-height: 1.75em;
       }
@@ -364,7 +365,7 @@ export default class Webtorrent extends Intersection() {
     this.html = /* html */`
       <details ${this.hasAttribute('open') ? 'open' : ''}>
         <summary>
-          <div id=file-name></div>
+          <div id=file-name content="file info" content-open="file info"></div>
         </summary>
         <div id=content>
           <a id=error-link><slot name=error></slot></a>
@@ -410,7 +411,7 @@ export default class Webtorrent extends Intersection() {
     this.webtorrentTargetElements = []
     this.clonedElements.forEach(element => element.remove())
     // clear information elements
-    this.summary.innerHTML = '<div id=file-name></div>'
+    this.summary.innerHTML = '<div id=file-name content="file info" content-open="file info"></div>'
     Array.from(this.progress.children).forEach(child => (child.innerHTML = ''))
     this.resetLink.children[0]?.assignedElements()?.[0].removeAttribute('rotate')
     // set new elements
@@ -474,7 +475,10 @@ export default class Webtorrent extends Intersection() {
             }))
             activityFunc()
           }
-          if (torrent.metadata) progressElement.setAttribute('value', 100 * torrent.progress)
+          if (torrent.metadata) {
+            progressElement.setAttribute('value', 100 * torrent.progress)
+            this.fileNameEl.setAttribute('content', `${100 * torrent.progress}%`)
+          }
           this.progressText.textContent = `${(100 * torrent.progress).toFixed(1)}%`
           this.peersEl.innerText = `${torrent.numPeers} peer${torrent.numPeers === 1 ? '' : 's'}`
         }
@@ -623,6 +627,7 @@ export default class Webtorrent extends Intersection() {
         })
       }
     }
+    // TODO: fallback view if no key
     file.on('stream', streamOrDoneFunc)
     file.on('done', streamOrDoneFunc)
     return await this._renderFileTo(file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, keyContainer, tagName, append)
@@ -696,6 +701,7 @@ export default class Webtorrent extends Intersection() {
           headers: { 'Content-Type': 'application/octet-stream' }
         }).blob()
       } else {
+        // TODO: fallback view if no key
         return await file.blob()
       }
     } catch (error) {
