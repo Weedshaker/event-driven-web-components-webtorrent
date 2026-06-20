@@ -181,6 +181,20 @@ export default class Webtorrent extends Intersection() {
         composed: true
       })))
       : Promise.resolve(null)
+    this.keyContainer.then(keyContainer => {
+      if (keyContainer) {
+        this.setAttribute('has-key', '')
+        let assignedElement
+        if (assignedElement = this.keyIcon.assignedElements()?.[0]) {
+          // reset the key element with all the attributes already set plus key epoch and public-name
+          const replacement = document.createElement(assignedElement.tagName)
+          Array.from(assignedElement.attributes).forEach(attribute => replacement.setAttribute(attribute.name, attribute.value))
+          replacement.setAttribute('epoch', keyContainer.key.epoch)
+          replacement.setAttribute('public-name', keyContainer.public.name)
+          assignedElement.replaceWith(replacement)
+        }
+      }
+    })
     this.renderTorrent(false, false, true)
     // @ts-ignore
     this.connectedCallbackOnce = () => {}
@@ -312,8 +326,17 @@ export default class Webtorrent extends Intersection() {
       :host > details > #content > #controls {
         margin-top: 1.125em;
       }
+      :host([has-key]) > details > #content > #controls {
+        justify-content: space-between;
+      }
       :host > details > #content > #controls > a {
         line-height: 0.5em;
+      }
+      :host > details > #content > #controls > [name=key] {
+        display: none;
+      }
+      :host([has-key]) > details > #content > #controls > [name=key] {
+        display: contents;
       }
       :host > details > #content > #progress {
         justify-content: space-between;
@@ -358,10 +381,9 @@ export default class Webtorrent extends Intersection() {
 
   /**
    * Render HTML
-   * @prop {string} nickname
    * @returns Promise<void>
    */
-  renderHTML (nickname) {
+  renderHTML () {
     this.html = /* html */`
       <details ${this.hasAttribute('open') ? 'open' : ''}>
         <summary>
@@ -370,7 +392,8 @@ export default class Webtorrent extends Intersection() {
         <div id=content>
           <a id=error-link><slot name=error></slot></a>
           <div id=controls>
-            <a  style="display: none;" id=pin-link><slot name=pin></slot></a>
+            <slot name=key></slot>
+            <a style="display: none;" id=pin-link><slot name=pin></slot></a>
             <a id=reset-link><slot name=reset></slot></a>
           </div>
           <div id=progress>
@@ -819,6 +842,10 @@ export default class Webtorrent extends Intersection() {
 
   get resetLink () {
     return this._resetLink || (this._resetLink = this.details.querySelector('#reset-link'))
+  }
+
+  get keyIcon () {
+    return this._keyIcon || (this._keyIcon = this.details.querySelector('[name=key]'))
   }
 
   get clonedElements () {
