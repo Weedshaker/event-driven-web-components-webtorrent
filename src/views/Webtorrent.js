@@ -191,6 +191,7 @@ export default class Webtorrent extends Intersection() {
           Array.from(assignedElement.attributes).forEach(attribute => replacement.setAttribute(attribute.name, attribute.value))
           replacement.setAttribute('epoch', keyContainer.key.epoch)
           replacement.setAttribute('public-name', keyContainer.public.name)
+          replacement.setAttribute('title', 'File successfully decrypted!')
           assignedElement.replaceWith(replacement)
         }
       }
