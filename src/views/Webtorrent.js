@@ -8,7 +8,6 @@ import { Intersection } from '../event-driven-web-components-prototypes/src/Inte
 
 /**
  * Webtorrent
- * TODO: rebuild all webTorrent desktop controls
  *
  * @export
  * @param {CustomElementConstructor} [ChosenHTMLElement = HTMLElement]
@@ -294,14 +293,15 @@ export default class Webtorrent extends Intersection() {
       :host > details > summary > figure {
         margin: 0 0 1em;
       }
-      :host > details > summary #file-name {
+      :host > details > summary #header {
         border-bottom: 1px solid var(--color-secondary);
         border-top: 1px solid var(--color-secondary);
         text-align: center;
         position: relative;
         cursor: pointer;
+        padding: 0.15em 0;
       }
-      :host > details > summary #file-name::after {
+      :host > details > summary #header::after {
         background: var(--color-secondary);
         clip-path: polygon(0 0, 100% 0, 50% 100%);
         color: var(--color-white);
@@ -311,33 +311,54 @@ export default class Webtorrent extends Intersection() {
         height: 1.75em;
         position: absolute;
         right: 30%;
+        top: 100%;
         width: 40%;
       }
-      :host > details[open] > summary #file-name::after {
+      :host > details[open] > summary #header::after {
         content: attr(content-open, 'file info');
         clip-path: none;
         line-height: 1.75em;
       }
-      :host > details > #content > #controls, :host > details > #content > #progress {
+      :host > details > summary #header > [name=key] {
+        display: none;
+      }
+      :host > details > summary #header > #file-name {
+        line-height: 1em;
+      }
+      :host([has-key]) > details > summary #header > [name=key] {
+        display: contents;
+      }
+      :host([has-key]) > details > summary #header {
+        flex: 1;
+        display: flex;
+        min-height: 2em;
+        align-items: flex-end;
+      }
+      :host([has-key]) > details > summary #header > #file-name {
+        align-self: flex-start;
+        width: calc(100% - 3.5em);
+      }
+      :host > details > #content > #controls, :host > details > #content > #progress, :host > details > #content > #progress-info {
         align-items: center;
         display: flex;
         gap: 1em;
         justify-content: end;
       }
+      :host > details > #content > #progress-info {
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 0 1em;
+        column-rule: 1px dotted currentColor;
+      }
+      :host > details .pair {
+        display: flex;
+        flex-wrap: nowrap;
+      }
       :host > details > #content > #controls {
         margin-top: 1.125em;
       }
-      :host([has-key]) > details > #content > #controls {
-        justify-content: space-between;
-      }
       :host > details > #content > #controls > a {
         line-height: 0.5em;
-      }
-      :host > details > #content > #controls > [name=key] {
-        display: none;
-      }
-      :host([has-key]) > details > #content > #controls > [name=key] {
-        display: contents;
       }
       :host > details > #content > #progress {
         justify-content: space-between;
@@ -357,11 +378,19 @@ export default class Webtorrent extends Intersection() {
       :host > details > #content > #progress > #progress-bar > progress {
         min-width: 100%;
       }
-      :host > details > #content > #progress > :where(#progress-text, #peers) {
+      :host > details > #content > #progress-info > * {
         flex-shrink: 0;
       }
+      :host > details > #content > #progress-info > *:empty {
+        display: none;
+      }
       @media only screen and (max-width: _max-width_) {
-        
+        :host([has-key]) > details > summary #header {
+          min-height: 3em;
+        }
+        :host > details > #content > #progress-info {
+          justify-content: center;
+        }
       }
     `
     return this.fetchTemplate()
@@ -388,20 +417,36 @@ export default class Webtorrent extends Intersection() {
     this.html = /* html */`
       <details ${this.hasAttribute('open') ? 'open' : ''}>
         <summary>
-          <div id=file-name content="file info" content-open="file info"></div>
+          <div id=header>
+            <slot name=key></slot>
+            <div id=file-name content="file info" content-open="file info"></div>
+          </div>
         </summary>
         <div id=content>
           <a id=error-link><slot name=error></slot></a>
           <div id=controls>
-            <slot name=key></slot>
             <a style="display: none;" id=pin-link><slot name=pin></slot></a>
             <a id=reset-link><slot name=reset></slot></a>
           </div>
           <div id=progress>
-            <input style="display: none;" title="pause or resume torrent" id=pause type=checkbox checked /><!-- TODO: capture click/change and stop click propagation, slot -->
+            <input style="display: none;" title="pause or resume torrent" id=pause type=checkbox checked />
             <div id=progress-bar></div>
-            <div id=progress-text></div>
-            <div id=peers></div>
+          </div>
+          <div id=progress-info>
+            <div id=torrent-status></div>
+            <div id=torrent-progress></div>
+            <div class=pair>
+              <div id=torrent-downloaded></div>
+              <span>&nbsp;/&nbsp;</span>
+              <div id=torrent-length></div>
+            </div>
+            <div id=torrent-peers></div>
+            <div class=pair>
+              <div id=torrent-download-speed></div>
+              <span>&nbsp;</span>
+              <div id=torrent-upload-speed></div>
+            </div>
+            <div id=torrent-time-remaining></div>
           </div>
         </div>
       </details>
@@ -434,9 +479,7 @@ export default class Webtorrent extends Intersection() {
     })
     this.webtorrentTargetElements = []
     this.clonedElements.forEach(element => element.remove())
-    // clear information elements
-    this.summary.innerHTML = '<div id=file-name content="file info" content-open="file info"></div>'
-    Array.from(this.progress.children).forEach(child => (child.innerHTML = ''))
+    this.progressBar.innerHTML = ''
     this.resetLink.children[0]?.assignedElements()?.[0].removeAttribute('rotate')
     // set new elements
     const {appendTarget: progressTarget, renderTarget: progressElement} = Webtorrent.getElement(this, 'progress', 'initializing...', 'progress', false)
@@ -461,7 +504,7 @@ export default class Webtorrent extends Intersection() {
       }))
     }).then(({torrent, streamToServerReadyPromise, error}) => {
       if (error === 'deleted' || error === 'paused') {
-        // TODO: deleted - render download icon
+        // TODO: deleted/garbage collected - render download icon
         // TODO: paused - render progress-down icon
         // TODO: checkbox element before progress, analog webtorrent desktop, to pause or resume
         console.log('*********', 'deleted torrent', this)
@@ -499,12 +542,21 @@ export default class Webtorrent extends Intersection() {
             }))
             activityFunc()
           }
-          if (torrent.metadata) {
-            progressElement.setAttribute('value', 100 * torrent.progress)
-            this.fileNameEl.setAttribute('content', `${100 * torrent.progress}%`)
-          }
-          this.progressText.textContent = `${(100 * torrent.progress).toFixed(1)}%`
-          this.peersEl.innerText = `${torrent.numPeers} peer${torrent.numPeers === 1 ? '' : 's'}`
+          if (torrent.metadata) progressElement.setAttribute('value', 100 * torrent.progress)
+          this.headerEl.setAttribute('content', torrent.done ? 'done' : `${100 * (torrent.progress || 0)}%`)
+          this.headerEl.setAttribute('content-open', torrent.done ? 'file info' : 'downloading')
+          this.torrentStatusEl.textContent = torrent.done
+            ? 'Done'
+            : torrent.paused
+              ? 'Paused'
+              : 'Downloading'
+          this.torrentProgressEl.textContent = `${(100 * torrent.progress).toFixed(1)}%`
+          this.torrentDownloadedEl.textContent = Webtorrent.formatBytes(torrent.downloaded)
+          this.torrentLengthEl.textContent = Webtorrent.formatBytes(torrent.length)
+          this.torrentPeersEl.textContent = `${torrent.numPeers} peer${torrent.numPeers === 1 ? '' : 's'}`
+          this.torrentDownloadSpeedEl.innerHTML = `&darr;${Webtorrent.formatBytes(torrent.downloadSpeed, true)}`
+          this.torrentUploadSpeedEl.innerHTML = `&uarr;${Webtorrent.formatBytes(torrent.uploadSpeed, true)}`
+          this.torrentTimeRemainingEl.textContent = torrent.timeRemaining ? `${Webtorrent.formatTimeRemaining(torrent.timeRemaining)} remaining` : ''
         }
         intervalFunc()
         clearInterval(this.intervalID)
@@ -544,7 +596,8 @@ export default class Webtorrent extends Intersection() {
               if (!this.hasAttribute('no-media-resume')) {
                 let mediaResumeItem
                 if (mediaResumeItem = this.mediaResumeMap.get(torrent.name)) {
-                  renderTarget.currentTime = mediaResumeItem.currentTime
+                  // must have at least 5 seconds to continue replay
+                  if ((mediaResumeItem.currentTime + 5) < renderTarget.duration) renderTarget.currentTime = mediaResumeItem.currentTime
                   // resume only if it was playing in less than the this.mediaResumeMaxTimeout before
                   if (renderTarget.paused && mediaResumeItem.timestamp + this.mediaResumeMaxTimeout > Date.now()) renderTarget.play()
                 }
@@ -813,6 +866,30 @@ export default class Webtorrent extends Intersection() {
               : ['a', 'href']
   }
 
+  static formatBytes(bytes, isPerSecond = false) {
+    const units = isPerSecond
+      ? ['bytes/s', 'KB/s', 'MB/s', 'GB/s', 'TB/s']
+      : ['bytes', 'KB', 'MB', 'GB', 'TB']
+    let i = 0
+    let value = bytes
+    while (value >= 1024 && i < units.length - 1) {
+      value /= 1024
+      i++
+    }
+    return `${value.toFixed(1)} ${units[i]}`
+  }
+
+  static formatTimeRemaining(ms) {
+    if (ms <= 0) return '0s'
+    const totalSeconds = Math.round(ms / 1000)
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const seconds = totalSeconds % 60
+    if (hours > 0) return `${hours}h ${minutes}m`
+    if (minutes > 0) return `${minutes}m ${seconds}s`
+    return `${seconds}s`
+  }
+
   get details () {
     return this._details || (this._details = this.root.querySelector('details'))
   }
@@ -821,20 +898,44 @@ export default class Webtorrent extends Intersection() {
     return this._summary || (this._summary = this.details.querySelector('summary'))
   }
 
-  get progress () {
-    return this._progress || (this._progress = this.details.querySelector('#progress'))
-  }
-
   get progressBar () {
     return this._progressBar || (this._progressBar = this.details.querySelector('#progress-bar'))
   }
 
-  get progressText () {
-    return this._progressText || (this._progressText = this.details.querySelector('#progress-text'))
+  get torrentStatusEl () {
+    return this._torrentStatusEl || (this._torrentStatusEl = this.details.querySelector('#torrent-status'))
   }
 
-  get peersEl () {
-    return this._peersEl || (this._peersEl = this.details.querySelector('#peers'))
+  get torrentProgressEl () {
+    return this._torrentProgressEl || (this._torrentProgressEl = this.details.querySelector('#torrent-progress'))
+  }
+
+  get torrentDownloadedEl () {
+    return this._torrentDownloadedEl || (this._torrentDownloadedEl = this.details.querySelector('#torrent-downloaded'))
+  }
+
+  get torrentLengthEl () {
+    return this._torrentLengthEl || (this._torrentLengthEl = this.details.querySelector('#torrent-length'))
+  }
+
+  get torrentPeersEl () {
+    return this._torrentPeersEl || (this._torrentPeersEl = this.details.querySelector('#torrent-peers'))
+  }
+
+  get torrentDownloadSpeedEl () {
+    return this._torrentDownloadSpeedEl || (this._torrentDownloadSpeedEl = this.details.querySelector('#torrent-download-speed'))
+  }
+
+  get torrentUploadSpeedEl () {
+    return this._torrentUploadSpeedEl || (this._torrentUploadSpeedEl = this.details.querySelector('#torrent-upload-speed'))
+  }
+
+  get torrentTimeRemainingEl () {
+    return this._torrentTimeRemainingEl || (this._torrentTimeRemainingEl = this.details.querySelector('#torrent-time-remaining'))
+  }
+
+  get headerEl () {
+    return this.details.querySelector('#header')
   }
 
   get fileNameEl () {
