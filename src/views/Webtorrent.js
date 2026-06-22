@@ -109,6 +109,18 @@ export default class Webtorrent extends Intersection() {
       if (event) event.stopPropagation()
     }
 
+    this.downloadClickLinkEventListener = event => {
+      if (this.torrent) this.torrent.files.forEach(async file => this.getBlob(file, await this.keyContainer).then(blob => {
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.target = '_blank'
+        a.download = file.name
+        a.click()
+        URL.revokeObjectURL(url)
+      }))
+    }
+
     let resetCounter = 0
     this.resetClickLinkEventListener = event => {
       if (event) {
@@ -161,6 +173,7 @@ export default class Webtorrent extends Intersection() {
     Promise.all(showPromises).then(() => (this.hidden = false))
     this.details.addEventListener('toggle', this.detailsToggleEventListener)
     this.addEventListener('dblclick', this.dblclickEventListener)
+    this.downloadLink.addEventListener('click', this.downloadClickLinkEventListener)
     this.resetLink.addEventListener('click', this.resetClickLinkEventListener)
     self.addEventListener('resize', this.resizeEventListener)
     document.body.addEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
@@ -204,6 +217,7 @@ export default class Webtorrent extends Intersection() {
     super.disconnectedCallback()
     this.details.removeEventListener('toggle', this.detailsToggleEventListener)
     this.removeEventListener('dblclick', this.dblclickEventListener)
+    this.downloadLink.removeEventListener('click', this.downloadClickLinkEventListener)
     this.resetLink.removeEventListener('click', this.resetClickLinkEventListener)
     self.removeEventListener('resize', this.resizeEventListener)
     document.body.removeEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
@@ -341,7 +355,7 @@ export default class Webtorrent extends Intersection() {
       :host > details > #content > #controls, :host > details > #content > #progress, :host > details > #content > #progress-info {
         align-items: center;
         display: flex;
-        gap: 1em;
+        gap: 0.5em;
         justify-content: end;
       }
       :host > details > #content > #progress-info {
@@ -359,6 +373,12 @@ export default class Webtorrent extends Intersection() {
       }
       :host > details > #content > #controls > a {
         line-height: 0.5em;
+      }
+      :host > details > #content > #controls > a#download-link {
+        display: none;
+      }
+      :host([done]) > details > #content > #controls > a#download-link {
+        display: block;
       }
       :host > details > #content > #progress {
         justify-content: space-between;
@@ -426,6 +446,7 @@ export default class Webtorrent extends Intersection() {
           <a id=error-link><slot name=error></slot></a>
           <div id=controls>
             <a style="display: none;" id=pin-link><slot name=pin></slot></a>
+            <a id=download-link><slot name=download></slot></a>
             <a id=reset-link><slot name=reset></slot></a>
           </div>
           <div id=progress>
@@ -504,11 +525,14 @@ export default class Webtorrent extends Intersection() {
       }))
     }).then(({torrent, streamToServerReadyPromise, error}) => {
       if (error === 'deleted' || error === 'paused') {
+        this.torrent = null
         // TODO: deleted/garbage collected - render download icon
         // TODO: paused - render progress-down icon
         // TODO: checkbox element before progress, analog webtorrent desktop, to pause or resume
         console.log('*********', 'deleted torrent', this)
         return
+      } else {
+        this.torrent = torrent
       }
       torrent.on('error', this.torrentErrorEventListener)
       const doneFunc = () => this.details.removeAttribute('open')
@@ -550,6 +574,11 @@ export default class Webtorrent extends Intersection() {
             : torrent.paused
               ? 'Paused'
               : 'Downloading'
+          if (torrent.done) {
+            this.setAttribute('done', '')
+          } else {
+            this.removeAttribute('done')
+          }
           this.torrentProgressEl.textContent = `${(100 * torrent.progress).toFixed(1)}%`
           this.torrentDownloadedEl.textContent = Webtorrent.formatBytes(torrent.downloaded)
           this.torrentLengthEl.textContent = Webtorrent.formatBytes(torrent.length)
@@ -627,7 +656,7 @@ export default class Webtorrent extends Intersection() {
     const videoResults = results.filter(result => result.tagName === 'video')
     if (videoResults.length === 1) {
       targetContainer.prepend(videoResults[0].appendTarget)
-      results.forEach(({renderTarget, appendTarget, figureTarget, tagName, file}) => {
+      results.forEach(async ({renderTarget, appendTarget, figureTarget, tagName, file}) => {
         if (tagName === 'track') {
           videoResults[0].renderTarget.appendChild(renderTarget)
         } else if (tagName === 'img') {
@@ -637,7 +666,7 @@ export default class Webtorrent extends Intersection() {
           if (streamToServerReadyPromise.done) {
             videoResults[0].renderTarget.setAttribute('poster', file.streamURL)
           } else {
-            this.getBlob(file, this.keyContainer).then(blob => videoResults[0].renderTarget.setAttribute('poster', URL.createObjectURL(blob)))
+            this.getBlob(file, await this.keyContainer).then(blob => videoResults[0].renderTarget.setAttribute('poster', URL.createObjectURL(blob)))
           }
         }
       })
@@ -940,6 +969,10 @@ export default class Webtorrent extends Intersection() {
 
   get fileNameEl () {
     return this.details.querySelector('#file-name')
+  }
+
+  get downloadLink () {
+    return this._downloadLink || (this._downloadLink = this.details.querySelector('#download-link'))
   }
 
   get resetLink () {
