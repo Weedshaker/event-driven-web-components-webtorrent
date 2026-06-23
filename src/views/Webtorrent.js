@@ -22,6 +22,7 @@ export default class Webtorrent extends Intersection() {
     this.torrentId = this.getAttribute('torrent-id') || encodeURI(Array.from((new URL(location.href)).searchParams).reduce((acc, curr) => curr[0] === 'torrent-id'
       ? `${curr[1]}`
       : `${acc}&${curr[0]}=${curr[1]}`, ''))
+    if (this.torrentId) this.setAttribute('has-torrent-id', '')
     const torrentIdUrl = new URL(this.torrentId)
     this.keyEpoch = torrentIdUrl.searchParams.get('key-epoch')
     this.iv = torrentIdUrl.searchParams.get('iv')
@@ -390,10 +391,12 @@ export default class Webtorrent extends Intersection() {
       :host > details > #content > #controls > a {
         line-height: 0.5em;
       }
-      :host > details > #content > #controls > a#download-link {
+      :host > details > #content > #controls > :where(a#download-link, a#reset-link) {
         display: none;
       }
-      :host([done]) > details > #content > #controls > a#download-link {
+      :host([done]) > details > #content > #controls > a#download-link,
+      :host([has-torrent-id]) > details > #content > #controls > a#reset-link,
+      :host(:not([updating])) > details > #content > #progress > #pause {
         display: block;
       }
       :host > details > #content > #progress {
@@ -401,6 +404,7 @@ export default class Webtorrent extends Intersection() {
         align-items: flex-end;
       }
       :host > details > #content > #progress > #pause {
+        display: none;
         width: 2em;
         height: 2em;
         margin: 0;
@@ -542,11 +546,15 @@ export default class Webtorrent extends Intersection() {
     }).then(({torrent, streamToServerReadyPromise, error}) => {
       if (error === 'deleted') {
         this.torrent = null
+        this.removeAttribute('has-torrent')
+        this.setAttribute('deleted', '')
         // TODO: deleted/garbage collected - render download icon
         console.log('*********', 'deleted torrent', this)
         return
       } else {
         this.torrent = torrent
+        this.setAttribute('has-torrent', '')
+        this.removeAttribute('deleted')
       }
       torrent.on('error', this.torrentErrorEventListener)
       const doneFunc = () => this.details.removeAttribute('open')

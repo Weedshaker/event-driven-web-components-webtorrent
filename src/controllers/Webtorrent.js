@@ -253,14 +253,16 @@ export default class Webtorrent extends WebWorker() {
       // save to storage
       this.onReady(torrent, event.detail.uid, event.detail.room, cid)
       // upload to ipfs || wait until done, on stream did not work so far
-      if (cid) torrent.on('done', () => this.dispatchEvent(new CustomEvent('ipfs-seed', {
-        detail: {
-          torrent
-        },
-        bubbles: true,
-        cancelable: true,
-        composed: true
-      })))
+      if (cid) torrent.on('done', () => {
+        if (!torrent.paused) this.dispatchEvent(new CustomEvent('ipfs-seed', {
+          detail: {
+            torrent
+          },
+          bubbles: true,
+          cancelable: true,
+          composed: true
+        }))
+      })
       this.onError(torrent)
       this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, result, result.torrent, () => {
         // inform ipfs about this cid to addWebSeed to the torrent when torrent.on 'infoHash'
@@ -325,13 +327,22 @@ export default class Webtorrent extends WebWorker() {
 
     this.webtorrentResetEventListener = event => this.reset(event.detail?.checkIfStalled)
 
-    this.webtorrentPauseEventListener = event => {
+    this.webtorrentPauseEventListener = async event => {
       if (event.detail.pause) {
         event.detail.torrent.pause()
         this.webWorker(Webtorrent.saveTorrentContainer, event.detail.torrent.infoHash, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, true)
       } else {
         event.detail.torrent.resume()
         this.webWorker(Webtorrent.saveTorrentContainer, event.detail.torrent.infoHash, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, false)
+        let addSeedResult
+        if (event.detail.torrent?.done && (addSeedResult = await Webtorrent.#torrentMap.get(event.detail.torrent.infoHash)) && addSeedResult.cid) this.dispatchEvent(new CustomEvent('ipfs-seed', {
+          detail: {
+            torrent: event.detail.torrent
+          },
+          bubbles: true,
+          cancelable: true,
+          composed: true
+        }))
       }
     }
 
@@ -352,7 +363,7 @@ export default class Webtorrent extends WebWorker() {
 
     this.webtorrentViewIsStalledEventListener = async event => {
       let torrentContainer
-      if (!event.detail.torrent.done && (torrentContainer = (await Webtorrent.#torrentMap.get(event.detail.torrent.infoHash)))) {
+      if (!event.detail.torrent.done && !event.detail.torrent.paused && (torrentContainer = (await Webtorrent.#torrentMap.get(event.detail.torrent.infoHash)))) {
         if (torrentContainer.cid) new Promise(resolve => this.dispatchEvent(new CustomEvent('ipfs-cat', {
           detail: {
             torrent: torrentContainer.torrent || event.detail.torrent,
