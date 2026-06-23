@@ -109,6 +109,20 @@ export default class Webtorrent extends Intersection() {
       if (event) event.stopPropagation()
     }
 
+    this.pauseChangeEventListener = event => {
+      if (this.torrent && this.torrent.infoHash) {
+        this.dispatchEvent(new CustomEvent(`${this.namespace}pause`, {
+          detail: {
+            pause: !this.pauseCheckbox.checked,
+            torrent: this.torrent
+          },
+          bubbles: true,
+          cancelable: true,
+          composed: true
+        }))
+      }
+    }
+
     this.downloadClickLinkEventListener = event => {
       if (this.torrent) this.torrent.files.forEach(async file => this.getBlob(file, await this.keyContainer).then(blob => {
         const url = URL.createObjectURL(blob)
@@ -174,6 +188,7 @@ export default class Webtorrent extends Intersection() {
     this.details.addEventListener('toggle', this.detailsToggleEventListener)
     this.addEventListener('dblclick', this.dblclickEventListener)
     this.downloadLink.addEventListener('click', this.downloadClickLinkEventListener)
+    this.pauseCheckbox.addEventListener('change', this.pauseChangeEventListener)
     this.resetLink.addEventListener('click', this.resetClickLinkEventListener)
     self.addEventListener('resize', this.resizeEventListener)
     document.body.addEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
@@ -218,6 +233,7 @@ export default class Webtorrent extends Intersection() {
     this.details.removeEventListener('toggle', this.detailsToggleEventListener)
     this.removeEventListener('dblclick', this.dblclickEventListener)
     this.downloadLink.removeEventListener('click', this.downloadClickLinkEventListener)
+    this.pauseCheckbox.removeEventListener('change', this.pauseChangeEventListener)
     this.resetLink.removeEventListener('click', this.resetClickLinkEventListener)
     self.removeEventListener('resize', this.resizeEventListener)
     document.body.removeEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
@@ -450,7 +466,7 @@ export default class Webtorrent extends Intersection() {
             <a id=reset-link><slot name=reset></slot></a>
           </div>
           <div id=progress>
-            <input style="display: none;" title="pause or resume torrent" id=pause type=checkbox checked />
+            <input title="pause or resume torrent" id=pause type=checkbox checked />
             <div id=progress-bar></div>
           </div>
           <div id=progress-info>
@@ -524,11 +540,9 @@ export default class Webtorrent extends Intersection() {
         composed: true
       }))
     }).then(({torrent, streamToServerReadyPromise, error}) => {
-      if (error === 'deleted' || error === 'paused') {
+      if (error === 'deleted') {
         this.torrent = null
         // TODO: deleted/garbage collected - render download icon
-        // TODO: paused - render progress-down icon
-        // TODO: checkbox element before progress, analog webtorrent desktop, to pause or resume
         console.log('*********', 'deleted torrent', this)
         return
       } else {
@@ -566,14 +580,17 @@ export default class Webtorrent extends Intersection() {
             }))
             activityFunc()
           }
-          if (torrent.metadata) progressElement.setAttribute('value', 100 * torrent.progress)
-          this.headerEl.setAttribute('content', torrent.done ? 'done' : `${100 * (torrent.progress || 0)}%`)
-          this.headerEl.setAttribute('content-open', torrent.done ? 'file info' : 'downloading')
-          this.torrentStatusEl.textContent = torrent.done
-            ? 'Done'
-            : torrent.paused
-              ? 'Paused'
+          this.torrentStatusEl.textContent = torrent.paused
+            ? torrent.done
+              ? 'Not seeding'
+              : 'Paused'
+            : torrent.done
+              ? 'Seeding'
               : 'Downloading'
+          if (torrent.metadata) progressElement.setAttribute('value', 100 * torrent.progress)
+          this.headerEl.setAttribute('content', torrent.done ? this.torrentStatusEl.textContent : `${this.torrentStatusEl.textContent} - ${100 * (torrent.progress || 0)}%`)
+          this.headerEl.setAttribute('content-open', torrent.done ? 'file info' : this.torrentStatusEl.textContent)
+          this.pauseCheckbox.checked = !torrent.paused
           if (torrent.done) {
             this.setAttribute('done', '')
           } else {
@@ -969,6 +986,10 @@ export default class Webtorrent extends Intersection() {
 
   get fileNameEl () {
     return this.details.querySelector('#file-name')
+  }
+
+  get pauseCheckbox () {
+    return this._pauseCheckbox || (this._pauseCheckbox = this.details.querySelector('#pause'))
   }
 
   get downloadLink () {
