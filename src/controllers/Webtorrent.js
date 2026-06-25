@@ -13,8 +13,11 @@ import { WebWorker } from '../event-driven-web-components-prototypes/src/WebWork
  *  room?: string,
  *  cid?: string,
  *  infoHash?: string,
- *  torrentName?: string,
- *  torrentLength?: number, // bytes
+ *  magnetURI?: string,
+ *  name?: string,
+ *  progress?: number,
+ *  fileTypes?: string[],
+ *  length?: number, // bytes
  *  torrentFile: never[],
  *  added: {
  *    timestamp: number,
@@ -126,6 +129,10 @@ export default class Webtorrent extends WebWorker() {
     this.importMetaUrl = import.meta.url.replace(/(.*\/)(.*)$/, '$1')
     // set attribute namespace
     this.namespace = this.getAttribute('namespace') || 'webtorrent-'
+    // @ts-ignore
+    this.opfsMobileQuota = Environment?.opfsMobileQuota || Infinity
+    // @ts-ignore
+    this.opfsDesktopQuota = Environment?.opfsDesktopQuota || Infinity
     // init is going to fill this Promise
     this.setClientPromise()
     const presetAddOpts = {
@@ -220,7 +227,7 @@ export default class Webtorrent extends WebWorker() {
       let torrentId = event.detail.torrentId
       // figure out the torrentId, best to get torrentFile from storage to resurrect torrent
       /** @type {WEBTORRENT_CONTAINER} */
-      const torrentContainer = await this.webWorker(Webtorrent.loadTorrentContainer, infoHash)
+      const torrentContainer = await this.webWorker(Webtorrent.loadTorrentContainers, infoHash)
       if (!event.detail.force && torrentContainer?.deleted) {
         return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}not-added`, {
           error: 'deleted',
@@ -228,8 +235,6 @@ export default class Webtorrent extends WebWorker() {
           set: 'event.detail.force === true'
         }, null)
       }
-      // this function has to be called from time to time, cleaning OPFS
-      this.estimateAndRemoveExceedingEntries()
       if (torrentContainer?.torrentFile) {
         torrentId = new Uint8Array(torrentContainer.torrentFile)
       } else if (cid) {
@@ -253,8 +258,10 @@ export default class Webtorrent extends WebWorker() {
       // save to storage
       this.onReady(torrent, event.detail.uid, event.detail.room, cid)
       // upload to ipfs || wait until done, on stream did not work so far
-      if (cid) torrent.on('done', () => {
-        if (!torrent.paused) this.dispatchEvent(new CustomEvent('ipfs-seed', {
+      torrent.on('done', () => {
+        // this function has to be called from time to time, cleaning OPFS
+        this.estimateAndRemoveExceedingEntries()
+        if (cid && !torrent.paused) this.dispatchEvent(new CustomEvent('ipfs-seed', {
           detail: {
             torrent
           },
@@ -330,10 +337,10 @@ export default class Webtorrent extends WebWorker() {
     this.webtorrentPauseEventListener = async event => {
       if (event.detail.pause) {
         event.detail.torrent.pause()
-        this.webWorker(Webtorrent.saveTorrentContainer, event.detail.torrent.infoHash, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, true)
+        this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(event.detail.torrent), undefined, undefined, undefined, undefined, undefined, undefined, true)
       } else {
         event.detail.torrent.resume()
-        this.webWorker(Webtorrent.saveTorrentContainer, event.detail.torrent.infoHash, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, false)
+        this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(event.detail.torrent), undefined, undefined, undefined, undefined, undefined, undefined, false)
         let addSeedResult
         if (event.detail.torrent?.done && (addSeedResult = await Webtorrent.#torrentMap.get(event.detail.torrent.infoHash)) && addSeedResult.cid) this.dispatchEvent(new CustomEvent('ipfs-seed', {
           detail: {
@@ -599,7 +606,7 @@ export default class Webtorrent extends WebWorker() {
   }
 
   onReady (torrent, uid, room, cid, self) {
-    torrent.on('ready', () => this.webWorker(Webtorrent.saveTorrentContainer, torrent.infoHash.toLowerCase(), torrent.name, torrent.length, torrent.torrentFile, location.href, uid, room, cid, self))
+    torrent.on('ready', () => this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), location.href, uid, room, cid, self))
   }
 
   onError (torrent) {
@@ -610,12 +617,30 @@ export default class Webtorrent extends WebWorker() {
   estimateAndRemoveExceedingEntries () {
     clearTimeout(this.removeEntriesTimeout)
     this.removeEntriesTimeout = setTimeout(async () => {
-      console.log('*********', this.webWorker(Webtorrent.loadTorrentContainer))
-      const { usage, quota } = await navigator.storage.estimate()
+      const { usage: navigatorUsage = 0, quota: navigatorQuota = 0 } = await navigator.storage.estimate()
       // @ts-ignore
-      console.log({usedMB: (usage / 1024 / 1024).toFixed(2), quotaMB: (quota / 1024 / 1024).toFixed(2), freeMB: ((quota - usage) / 1024 / 1024).toFixed(2),})
-      // TODO: continue
-    }, 10000)
+      const quota = Math.min(navigatorQuota * 0.8, navigator.userAgentData?.mobile ?? /Mobi|Android/i.test(navigator.userAgent) ? this.opfsMobileQuota : this.opfsDesktopQuota)
+      if (navigatorUsage > quota) {
+        const torrentContainers = (await this.webWorker(Webtorrent.loadTorrentContainers))
+          .filter(torrentContainer => !torrentContainer.pinned)
+          .sort((a, b) => (a.added[0]?.timestamp || 0) - (b.added[0]?.timestamp || 0))
+        let usage = navigatorUsage
+        for (const torrentContainer of torrentContainers) {
+          if (usage < quota) break
+          const {torrent, error}  = await new Promise(resolve => this.webtorrentAddEventListener({
+            detail: {
+              torrentId: torrentContainer.magnetURI,
+              resolve
+            }
+          }))
+          if (torrent && !error) {
+            await Webtorrent.destroyTorrent(torrent, torrentContainer.infoHash || torrent.infoHash, {destroyStore: true})
+            await this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), undefined, undefined, undefined, undefined, undefined, undefined,undefined, true)
+          }
+          usage -= torrentContainer.length || torrent.length
+        }
+      }
+    }, 5000)
   }
 
   /**
@@ -623,10 +648,7 @@ export default class Webtorrent extends WebWorker() {
    * 
    * @async
    * @static
-   * @param {string} infoHash
-   * @param {any} [torrentFile=undefined]
-   * @param {string} [torrentName=undefined]
-   * @param {number} [torrentLength=undefined]
+   * @param {any} torrent
    * @param {string} [href=undefined]
    * @param {string} [uid=undefined]
    * @param {string} [room=undefined]
@@ -635,9 +657,12 @@ export default class Webtorrent extends WebWorker() {
    * @param {boolean} [pinned=undefined]
    * @param {boolean} [paused=undefined]
    * @param {boolean} [deleted=undefined]
-   * @returns {Promise<WEBTORRENT_CONTAINER>}
+   * @returns {Promise<WEBTORRENT_CONTAINER|null>}
    */
-  static async saveTorrentContainer (infoHash, torrentName = undefined, torrentLength = undefined, torrentFile = undefined, href = undefined, uid = undefined, room = undefined, cid = undefined, self = undefined, pinned = undefined, paused = undefined, deleted = undefined) {
+  static async saveTorrentContainer (torrent, href = undefined, uid = undefined, room = undefined, cid = undefined, self = undefined, pinned = undefined, paused = undefined, deleted = undefined) {
+    if (!torrent) return null
+    const infoHash = torrent.infoHash?.toLowerCase()
+    if (!infoHash) return null
     /** @type {FileSystemDirectoryHandle} */
     const torrentsDir = await navigator.storage.getDirectory().then(opfsRoot => opfsRoot.getDirectoryHandle('torrents', { create: true }))
     // @ts-ignore
@@ -654,18 +679,6 @@ export default class Webtorrent extends WebWorker() {
       torrentContainer = {}
     }
     torrentContainer = {
-      self: torrentContainer.self === undefined ? self : torrentContainer.self,
-      pinned: pinned === undefined ? torrentContainer.pinned : pinned,
-      paused: paused === undefined ? torrentContainer.paused : paused,
-      deleted: deleted === undefined ? torrentContainer.deleted : deleted,
-      room: torrentContainer.room === undefined ? room : torrentContainer.room,
-      cid: torrentContainer.cid === undefined ? cid : torrentContainer.cid,
-      infoHash: torrentContainer.infoHash === undefined ? infoHash : torrentContainer.infoHash,
-      torrentName: torrentContainer.torrentName === undefined ? torrentName : torrentContainer.torrentName,
-      torrentLength: torrentContainer.torrentLength === undefined ? torrentLength : torrentContainer.torrentLength,
-      torrentFile: torrentFile
-        ? Array.from(torrentFile)
-        : torrentContainer.torrentFile,
       added: href || uid || room
         ? [{
           timestamp: Date.now(),
@@ -674,7 +687,22 @@ export default class Webtorrent extends WebWorker() {
           room
           // @ts-ignore
         }].concat(torrentContainer.added || [])
-        : torrentContainer.added
+        : torrentContainer.added || [],
+      room: torrentContainer.room === undefined ? room : torrentContainer.room,
+      cid: torrentContainer.cid === undefined ? cid : torrentContainer.cid,
+      self: torrentContainer.self === undefined ? self : torrentContainer.self,
+      pinned: pinned === undefined ? torrentContainer.pinned : pinned,
+      paused: paused === undefined ? torrentContainer.paused : paused,
+      deleted: deleted === undefined ? torrentContainer.deleted : deleted,
+      infoHash: torrentContainer.infoHash === undefined ? infoHash : torrentContainer.infoHash,
+      magnetURI: torrentContainer.magnetURI === undefined ? torrent.magnetURI : torrentContainer.magnetURI,
+      name: torrentContainer.name === undefined ? torrent.name : torrentContainer.name,
+      length: torrentContainer.length === undefined ? torrent.length : torrentContainer.length,
+      progress: torrent.progress,
+      fileTypes: torrentContainer.fileTypes === undefined ? torrent.fileTypes : torrentContainer.fileTypes,
+      torrentFile: torrent.torrentFile
+        ? Array.from(torrent.torrentFile)
+        : torrentContainer.torrentFile
     }
     // @ts-ignore
     if (Array.isArray(torrentContainer.added) && torrentContainer.added.length > 20) torrentContainer.added.length = 20
@@ -687,13 +715,14 @@ export default class Webtorrent extends WebWorker() {
 
   /**
    * NOTE: This function must run in a webworker, otherwise getFileHandle does not have the function: createSyncAccessHandle
+   * returns one (with infoHash) or all torrent containers
    * 
    * @async
    * @static
    * @param {string} [infoHash='']
    * @returns {Promise<WEBTORRENT_CONTAINER|{}|WEBTORRENT_CONTAINER[]|{}[]>}
    */
-  static async loadTorrentContainer (infoHash = '') {
+  static async loadTorrentContainers (infoHash = '') {
     /** @type {FileSystemDirectoryHandle} */
     const torrentsDir = await navigator.storage.getDirectory().then(opfsRoot => opfsRoot.getDirectoryHandle('torrents', { create: true }))
     const readJson = async fileHandle => {
@@ -716,6 +745,19 @@ export default class Webtorrent extends WebWorker() {
         torrentContainers.push(readJson(fileHandle))
       }
       return Promise.all(torrentContainers)
+    }
+  }
+
+  static extractTorrentSimpleObj (torrent) {
+    if (!torrent) return null
+    return {
+      infoHash: torrent.infoHash,
+      magnetURI: torrent.magnetURI,
+      name: torrent.name,
+      length: torrent.length,
+      progress: torrent.progress,
+      fileTypes: torrent.files.map(file => file.type),
+      torrentFile: torrent.torrentFile
     }
   }
 

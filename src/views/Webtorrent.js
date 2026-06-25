@@ -306,7 +306,8 @@ export default class Webtorrent extends Intersection() {
         display: block;
       }
       :host {
-        display: block;
+        display: inline-block;
+        width: 100%;
         white-space: normal;
       }
       :host > details {
@@ -331,6 +332,9 @@ export default class Webtorrent extends Intersection() {
         position: relative;
         cursor: pointer;
         padding: 0.15em 0;
+      }
+      :host > details[open] > summary #header {
+        border-bottom: 1px dashed var(--color-secondary);
       }
       :host > details > summary #header::after {
         background: var(--color-secondary);
@@ -368,6 +372,12 @@ export default class Webtorrent extends Intersection() {
       :host([has-key]) > details > summary #header > #file-name {
         align-self: flex-start;
         width: calc(100% - 3.5em);
+      }
+      :host > details > #content {
+        padding: 0 0.5em 0.25em;
+      }
+      :host > details[open] > #content {
+        border-bottom: 1px solid var(--color-secondary);
       }
       :host > details > #content > #controls, :host > details > #content > #progress, :host > details > #content > #progress-info {
         align-items: center;
