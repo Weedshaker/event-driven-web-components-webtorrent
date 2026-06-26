@@ -309,6 +309,10 @@ export default class Webtorrent extends Intersection() {
         display: inline-block;
         width: 100%;
         white-space: normal;
+        margin-bottom: 1.25em;
+      }
+      :host:has(> details[open]) {
+        margin-bottom: 0;
       }
       :host > details {
         display: flex;

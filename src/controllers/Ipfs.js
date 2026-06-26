@@ -715,7 +715,7 @@ export default class Ipfs extends HTMLElement {
       })
       return true
     })
-    if (ignoreError) this.gateways.forEach(gateway => {
+    if (!gateway && ignoreError) this.gateways.forEach(gateway => {
       gateway.hasError = false
       gateway.hasAddError = false
     })

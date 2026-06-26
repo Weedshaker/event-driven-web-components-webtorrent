@@ -704,8 +704,20 @@ export default class Webtorrent extends WebWorker() {
         ? Array.from(torrent.torrentFile)
         : torrentContainer.torrentFile
     }
-    // @ts-ignore
-    if (Array.isArray(torrentContainer.added) && torrentContainer.added.length > 20) torrentContainer.added.length = 20
+    // filter unique message-uid or rooms
+    const uids = []
+    const rooms = []
+    torrentContainer.added = torrentContainer.added.filter(added => {
+      if (added.uid) {
+        if (uids.includes(added.uid)) return false
+        uids.push(added.uid)
+        return true
+      } else {
+        if (rooms.includes(added.room)) return false
+        rooms.push(added.room)
+        return true
+      }
+    })
     access.truncate(0)
     access.write(new TextEncoder().encode(JSON.stringify(torrentContainer)), { at: 0 })
     access.flush()
