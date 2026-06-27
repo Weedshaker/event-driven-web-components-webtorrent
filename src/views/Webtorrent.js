@@ -935,6 +935,7 @@ export default class Webtorrent extends Intersection() {
   }
 
   static formatBytes(bytes, isPerSecond = false) {
+    if(!bytes) return '-'
     const units = isPerSecond
       ? ['bytes/s', 'KB/s', 'MB/s', 'GB/s', 'TB/s']
       : ['bytes', 'KB', 'MB', 'GB', 'TB']
@@ -944,11 +945,11 @@ export default class Webtorrent extends Intersection() {
       value /= 1024
       i++
     }
-    return `${value.toFixed(1)} ${units[i]}`
+    return `${value?.toFixed(1) || '-'} ${units[i]}`
   }
 
   static formatTimeRemaining(ms) {
-    if (ms <= 0) return '0s'
+    if (!ms || ms < 0) return '0s'
     const totalSeconds = Math.round(ms / 1000)
     const hours = Math.floor(totalSeconds / 3600)
     const minutes = Math.floor((totalSeconds % 3600) / 60)
