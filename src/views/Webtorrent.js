@@ -86,6 +86,7 @@ export default class Webtorrent extends Intersection() {
 
     // Avoid DOM performance issues
     this.updateHeight = () => {
+      // todo: try aspect ratio instead of min-height once each time when loaded
       let promiseResolve
       const promise = new Promise(resolve => (promiseResolve = resolve))
       this.removeAttribute('has-height')
