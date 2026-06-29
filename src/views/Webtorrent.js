@@ -40,6 +40,9 @@ export default class Webtorrent extends Intersection() {
     this.stallTimeout = 10000
     const stillScrollAfter = 3000
 
+    // keep track on how many times render torrent got called
+    this.renderedTorrent = 0
+
     this.torrentErrorEventListener = event => {
       this.renderTorrent(true)
       this.dispatchEvent(new CustomEvent(`${this.namespace}view-torrent-error`, {
@@ -575,6 +578,8 @@ export default class Webtorrent extends Intersection() {
       const doneFunc = () => this.details.removeAttribute('open')
       if (torrent.done) doneFunc()
       torrent.on('done', doneFunc)
+      this.renderedTorrent++
+      const firstActivity = Date.now()
       let lastActivity = Date.now()
       const activityFunc = () => (lastActivity = Date.now())
       torrent.on('download', activityFunc)
@@ -590,8 +595,9 @@ export default class Webtorrent extends Intersection() {
             clearInterval(this.intervalID)
             return this.renderTorrent()
           }
-          // is torrent stalled
-          if (!torrent.done && !torrent.paused && (lastActivity + this.stallTimeout) < Date.now() && torrent.numPeers > 0 && !torrent.downloadSpeed && !torrent.uploadSpeed) {
+          // is torrent stalled without activity for some time?
+          // is it the first torrent render and no metadata after first activity for some time?
+          if (!torrent.done && !torrent.paused && torrent.numPeers > 0 && !torrent.downloadSpeed && !torrent.uploadSpeed && ((lastActivity + this.stallTimeout) < Date.now() || (this.renderedTorrent === 1 && !torrent.metadata && (firstActivity + this.stallTimeout) < Date.now()))) {
             this.dispatchEvent(new CustomEvent(`${this.namespace}view-is-stalled`, {
               detail: {
                 torrent,
