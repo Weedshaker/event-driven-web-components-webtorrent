@@ -128,6 +128,26 @@ export default class Webtorrent extends Intersection() {
       }
     }
 
+    this.pinClickLinkEventListener = evnet => {
+      if (this.torrent && this.torrent.infoHash) {
+        const pinned = this.pinLink.children[0]?.assignedElements()?.[0].hasAttribute('state')
+        if (pinned) {
+          this.pinLink.children[0]?.assignedElements()?.[0].removeAttribute('state')
+        } else {
+          this.pinLink.children[0]?.assignedElements()?.[0].setAttribute('state', 'pinned')
+        }
+        this.dispatchEvent(new CustomEvent(`${this.namespace}pin`, {
+          detail: {
+            pinned: !pinned,
+            torrent: this.torrent
+          },
+          bubbles: true,
+          cancelable: true,
+          composed: true
+        }))
+      }
+    }
+
     this.downloadClickLinkEventListener = event => {
       if (this.torrent) this.torrent.files.forEach(async file => this.getBlob(file, await this.keyContainer).then(blob => {
         const url = URL.createObjectURL(blob)
@@ -192,6 +212,7 @@ export default class Webtorrent extends Intersection() {
     Promise.all(showPromises).then(() => (this.hidden = false))
     this.details.addEventListener('toggle', this.detailsToggleEventListener)
     this.addEventListener('dblclick', this.dblclickEventListener)
+    this.pinLink.addEventListener('click', this.pinClickLinkEventListener)
     this.downloadLink.addEventListener('click', this.downloadClickLinkEventListener)
     this.pauseCheckbox.addEventListener('change', this.pauseChangeEventListener)
     this.resetLink.addEventListener('click', this.resetClickLinkEventListener)
@@ -237,6 +258,7 @@ export default class Webtorrent extends Intersection() {
     super.disconnectedCallback()
     this.details.removeEventListener('toggle', this.detailsToggleEventListener)
     this.removeEventListener('dblclick', this.dblclickEventListener)
+    this.pinLink.removeEventListener('click', this.pinClickLinkEventListener)
     this.downloadLink.removeEventListener('click', this.downloadClickLinkEventListener)
     this.pauseCheckbox.removeEventListener('change', this.pauseChangeEventListener)
     this.resetLink.removeEventListener('click', this.resetClickLinkEventListener)
@@ -483,7 +505,7 @@ export default class Webtorrent extends Intersection() {
         <div id=content>
           <a id=error-link><slot name=error></slot></a>
           <div id=controls>
-            <a style="display: none;" id=pin-link><slot name=pin></slot></a>
+            <a id=pin-link><slot name=pin></slot></a>
             <a id=download-link><slot name=download></slot></a>
             <a id=reset-link><slot name=reset></slot></a>
           </div>
@@ -561,7 +583,7 @@ export default class Webtorrent extends Intersection() {
         cancelable: true,
         composed: true
       }))
-    }).then(({torrent, streamToServerReadyPromise, error}) => {
+    }).then(({torrent, streamToServerReadyPromise, error, pinned}) => {
       if (error === 'deleted') {
         this.torrent = null
         this.removeAttribute('has-torrent')
@@ -587,6 +609,11 @@ export default class Webtorrent extends Intersection() {
       torrent.on('wire', activityFunc)
       let videosPlaying = []
       this.fileNameEl.textContent = torrent.name
+      if (pinned) {
+        this.pinLink.children[0]?.assignedElements()?.[0].setAttribute('state', 'pinned')
+      } else {
+        this.pinLink.children[0]?.assignedElements()?.[0].removeAttribute('state')
+      }
       this.doOnIntersection = () => {
         if (!this.hasAttribute('no-video-auto-pause')) videosPlaying.forEach(video => video.play())
         // destroy has no event on webTorrent, thats why interval
@@ -597,7 +624,7 @@ export default class Webtorrent extends Intersection() {
           }
           // is torrent stalled without activity for some time?
           // is it the first torrent render and no metadata after first activity for some time?
-          if (!torrent.done && !torrent.paused && torrent.numPeers > 0 && !torrent.downloadSpeed && !torrent.uploadSpeed && ((lastActivity + this.stallTimeout) < Date.now() || (this.renderedTorrent === 1 && !torrent.metadata && (firstActivity + this.stallTimeout) < Date.now()))) {
+          if (!torrent.done && !torrent.paused && torrent.numPeers > 0 && !torrent.downloadSpeed && !torrent.uploadSpeed && ((lastActivity + this.stallTimeout) < Date.now() || (this.renderedTorrent <= 3 && !torrent.metadata && (firstActivity + this.stallTimeout) < Date.now()))) {
             this.dispatchEvent(new CustomEvent(`${this.namespace}view-is-stalled`, {
               detail: {
                 torrent,
@@ -1020,6 +1047,10 @@ export default class Webtorrent extends Intersection() {
 
   get pauseCheckbox () {
     return this._pauseCheckbox || (this._pauseCheckbox = this.details.querySelector('#pause'))
+  }
+
+  get pinLink () {
+    return this._pinLink || (this._pinLink = this.details.querySelector('#pin-link'))
   }
 
   get downloadLink () {

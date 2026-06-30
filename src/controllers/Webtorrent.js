@@ -36,6 +36,7 @@ import { WebWorker } from '../event-driven-web-components-prototypes/src/WebWork
  *  room?: string,
  *  cid?: string|null,
  *  resetResume?: boolean,
+ *  pinned?: boolean, // only used as an webtorrent-add result response
  * }} WEBTORRENT_ADD_SEED_RESULT
  */
 
@@ -253,7 +254,7 @@ export default class Webtorrent extends WebWorker() {
       const torrent = client.add(torrentId, Object.assign(event.detail.opts || {}, await this.addOpts))
       if (torrentContainer?.paused) torrent.pause()
       /** @type {WEBTORRENT_ADD_SEED_RESULT} */
-      const result = {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise, uid: event.detail.uid, room: event.detail.room, cid, resetResume: event.detail.resetResume}
+      const result = {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise, uid: event.detail.uid, room: event.detail.room, cid, resetResume: event.detail.resetResume, pinned: torrentContainer?.pinned}
       torrentMapResolve(result)
       // save to storage
       this.onReady(torrent, event.detail.uid, event.detail.room, cid)
@@ -350,6 +351,23 @@ export default class Webtorrent extends WebWorker() {
           cancelable: true,
           composed: true
         }))
+      }
+    }
+
+    this.webtorrentPinEventListener = async event => {
+      const torrentContainer = (await Webtorrent.#torrentMap.get(event.detail.torrent.infoHash))
+      if (event.detail.pinned) {
+        this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(event.detail.torrent), undefined, undefined, undefined, undefined, undefined, true)
+        if (torrentContainer) {
+          torrentContainer.pinned = true
+          Webtorrent.#torrentMap.set(event.detail.torrent.infoHash, Promise.resolve(torrentContainer))
+        }
+      } else {
+        this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(event.detail.torrent), undefined, undefined, undefined, undefined, undefined, false)
+        if (torrentContainer) {
+          torrentContainer.pinned = false
+          Webtorrent.#torrentMap.set(event.detail.torrent.infoHash, Promise.resolve(torrentContainer))
+        }
       }
     }
 
@@ -497,7 +515,7 @@ export default class Webtorrent extends WebWorker() {
       if (checkIfStalled && (await this.clientPromise).torrents.some(torrent => torrent.downloadSpeed || torrent.uploadSpeed)) return false
       const resumeTorrents = (await Promise.all(Array.from(Webtorrent.#torrentMap.map).map(async ([key, value]) => {
         const result = await value
-        if (!result.resetResume) return null
+        if (!result.resetResume && !result.pinned) return null
         return result
       }))).filter(Boolean)
       await this.destroy()
@@ -520,11 +538,31 @@ export default class Webtorrent extends WebWorker() {
   }
 
   connectedCallback () {
-    this.init()
+    this.init().then(async () => {
+      document.body.setAttribute(`${this.namespace}ready`, 'true')
+      this.dispatchEvent(new CustomEvent(`${this.namespace}ready`, {
+        detail: {
+          ready: true
+        },
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      }))
+      // resume opfs saved, pinned and not paused torrentContainers
+      const torrentContainers = (await this.webWorker(Webtorrent.loadTorrentContainers)).filter(torrentContainer => torrentContainer.pinned && !torrentContainer.paused && !torrentContainer.deleted)
+      for (const torrentContainer of torrentContainers) {
+        this.webtorrentAddEventListener({
+          detail: {
+            torrentId: torrentContainer.magnetURI
+          }
+        })
+      }
+    })
     document.body.addEventListener(`${this.namespace}add`, this.webtorrentAddEventListener)
     document.body.addEventListener(`${this.namespace}seed`, this.webtorrentSeedEventListener)
     document.body.addEventListener(`${this.namespace}reset`, this.webtorrentResetEventListener)
     document.body.addEventListener(`${this.namespace}pause`, this.webtorrentPauseEventListener)
+    document.body.addEventListener(`${this.namespace}pin`, this.webtorrentPinEventListener)
     document.body.addEventListener(`${this.namespace}view-is-stalled`, this.webtorrentViewIsStalledEventListener)
     document.body.addEventListener(`${this.namespace}view-file-error`, this.webtorrentViewFileErrorEventListener)
     document.body.addEventListener(`${this.namespace}view-torrent-error`, this.webtorrentViewTorrentErrorEventListener)
@@ -533,11 +571,22 @@ export default class Webtorrent extends WebWorker() {
   }
 
   disconnectedCallback () {
-    this.destroy()
+    this.destroy().then(() => {
+      document.body.removeAttribute(`${this.namespace}ready`)
+      this.dispatchEvent(new CustomEvent(`${this.namespace}ready`, {
+        detail: {
+          ready: false
+        },
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      }))
+    })
     document.body.removeEventListener(`${this.namespace}add`, this.webtorrentAddEventListener)
     document.body.removeEventListener(`${this.namespace}seed`, this.webtorrentSeedEventListener)
     document.body.removeEventListener(`${this.namespace}reset`, this.webtorrentResetEventListener)
     document.body.removeEventListener(`${this.namespace}pause`, this.webtorrentPauseEventListener)
+    document.body.removeEventListener(`${this.namespace}pin`, this.webtorrentPinEventListener)
     document.body.removeEventListener(`${this.namespace}view-is-stalled`, this.webtorrentViewIsStalledEventListener)
     document.body.removeEventListener(`${this.namespace}view-file-error`, this.webtorrentViewFileErrorEventListener)
     document.body.removeEventListener(`${this.namespace}view-torrent-error`, this.webtorrentViewTorrentErrorEventListener)
@@ -622,7 +671,7 @@ export default class Webtorrent extends WebWorker() {
       const quota = Math.min(navigatorQuota * 0.8, navigator.userAgentData?.mobile ?? /Mobi|Android/i.test(navigator.userAgent) ? this.opfsMobileQuota : this.opfsDesktopQuota)
       if (navigatorUsage > quota) {
         const torrentContainers = (await this.webWorker(Webtorrent.loadTorrentContainers))
-          .filter(torrentContainer => !torrentContainer.pinned)
+          .filter(torrentContainer => !torrentContainer.pinned && !torrentContainer.deleted)
           .sort((a, b) => (a.added[0]?.timestamp || 0) - (b.added[0]?.timestamp || 0))
         let usage = navigatorUsage
         for (const torrentContainer of torrentContainers) {
