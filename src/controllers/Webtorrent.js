@@ -522,7 +522,7 @@ export default class Webtorrent extends WebWorker() {
       await this.init()
       resumeTorrents.forEach(resumeTorrent => this.webtorrentAddEventListener({
         detail: {
-          torrentId: resumeTorrent?.torrent.magnetURI,
+          torrentId: `${resumeTorrent?.torrent.magnetURI}${resumeTorrent?.cid ? `&cid=${resumeTorrent.cid}` : ''}`,
           uid: resumeTorrent?.uid,
           room: resumeTorrent?.room,
           resetResume: resumeTorrent?.resetResume
@@ -553,7 +553,9 @@ export default class Webtorrent extends WebWorker() {
       for (const torrentContainer of torrentContainers) {
         this.webtorrentAddEventListener({
           detail: {
-            torrentId: torrentContainer.magnetURI
+            torrentId: `${torrentContainer.magnetURI}${torrentContainer.cid ? `&cid=${torrentContainer.cid}` : ''}`,
+            uid: torrentContainer.added[0]?.uid,
+            room: torrentContainer.room
           }
         })
       }
