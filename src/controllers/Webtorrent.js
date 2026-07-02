@@ -259,7 +259,7 @@ export default class Webtorrent extends WebWorker() {
       const result = {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise, uid: event.detail.uid, room: event.detail.room, cid, resetResume: event.detail.resetResume, pinned: torrentContainer?.pinned}
       torrentMapResolve(result)
       // save to storage
-      this.onReady(torrent, event.detail.uid, event.detail.room, event.detail.timestamp, cid, undefined, undefined, false)
+      this.onReady(torrent, event.detail.uid, event.detail.room, event.detail.timestamp, cid, event.detail.isSelf || false, undefined, false)
       // upload to ipfs || wait until done, on stream did not work so far
       torrent.on('done', () => {
         // this function has to be called from time to time, cleaning OPFS
@@ -445,7 +445,7 @@ export default class Webtorrent extends WebWorker() {
     // chat message got deleted, for that find the torrent and delete it
     this.chatDeletedEventListener = async event => {
       const torrentContainers = (await this.webWorker(Webtorrent.loadTorrentContainers))
-        .filter(torrentContainer => !torrentContainer.deleted && torrentContainer.added.some(added => Number(added.timestamp) === event.detail.timestamp))
+        .filter(torrentContainer => !torrentContainer.deleted && torrentContainer.added?.some(added => Number(added.timestamp) === event.detail.timestamp))
       for (const torrentContainer of torrentContainers) {
         const {torrent, error}  = await new Promise(resolve => this.webtorrentAddEventListener({
           detail: {
@@ -456,7 +456,7 @@ export default class Webtorrent extends WebWorker() {
         if (!torrent || error) break
         if (torrentContainer.added.every(added => added.timestamp === undefined || Number(added.timestamp) === event.detail.timestamp)) {
           await Webtorrent.destroyTorrent(torrent, torrentContainer.infoHash || torrent.infoHash, {destroyStore: true})
-          this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'destroyStore')
+          this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, event.detail.deleted === undefined ? 'destroyStore' : event.detail.deleted)
         } else {
           this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, [{key: 'timestamp', value: event.detail.timestamp}])
         }
@@ -466,7 +466,7 @@ export default class Webtorrent extends WebWorker() {
     // room got deleted, for that find the torrents and delete it
     this.yjsDeletedRoomEventListener = async event => {
       const torrentContainers = (await this.webWorker(Webtorrent.loadTorrentContainers))
-        .filter(torrentContainer => !torrentContainer.deleted && torrentContainer.added.some(added => event.detail.rooms.includes(added.room)))
+        .filter(torrentContainer => !torrentContainer.deleted && torrentContainer.added?.some(added => event.detail.rooms.includes(added.room)))
       for (const torrentContainer of torrentContainers) {
         const {torrent, error, existingResult}  = await new Promise(resolve => this.webtorrentAddEventListener({
           detail: {

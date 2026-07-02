@@ -185,6 +185,24 @@ export default class Webtorrent extends Intersection() {
       resetCounter++
     }
 
+    this.trashClickLinkEventListener = event => {
+      if (event) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+      if (this.hasAttribute('timestamp')) {
+        this.dispatchEvent(new CustomEvent('chat-deleted', {
+          detail: {
+            timestamp: Number(this.getAttribute('timestamp')),
+            deleted: true // not 'destroyStore' but just delete and keep torrentContainer with deleted flag = true
+          },
+          bubbles: true,
+          cancelable: true,
+          composed: true
+        }))
+      }
+    }
+
     this.webtorrentDidResetEventListener = event => {
       clearTimeout(errorTimeoutID)
       this.hadFileError = false
@@ -215,6 +233,7 @@ export default class Webtorrent extends Intersection() {
     this.downloadLink.addEventListener('click', this.downloadClickLinkEventListener)
     this.pauseCheckbox.addEventListener('change', this.pauseChangeEventListener)
     this.resetLink.addEventListener('click', this.resetClickLinkEventListener)
+    this.trashLink.addEventListener('click', this.trashClickLinkEventListener)
     self.addEventListener('resize', this.resizeEventListener)
     document.body.addEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
     if (this.infoHash) document.body.addEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
@@ -261,6 +280,7 @@ export default class Webtorrent extends Intersection() {
     this.downloadLink.removeEventListener('click', this.downloadClickLinkEventListener)
     this.pauseCheckbox.removeEventListener('change', this.pauseChangeEventListener)
     this.resetLink.removeEventListener('click', this.resetClickLinkEventListener)
+    this.trashLink.removeEventListener('click', this.trashClickLinkEventListener)
     self.removeEventListener('resize', this.resizeEventListener)
     document.body.removeEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
     if (this.infoHash) document.body.removeEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
@@ -427,6 +447,9 @@ export default class Webtorrent extends Intersection() {
         display: flex;
         flex-wrap: nowrap;
       }
+      :host > details .pair > #torrent-downloaded:empty + span {
+        display: none;
+      }
       :host([deleted]) > details > #content {
         display: none;
       }
@@ -436,10 +459,11 @@ export default class Webtorrent extends Intersection() {
       :host > details > #content > #controls > a {
         line-height: 0.5em;
       }
-      :host > details > #content > #controls > :where(a#download-link, a#reset-link) {
+      :host > details > #content > #controls > :where(a#download-link, a#reset-link, a#trash-link) {
         display: none;
       }
       :host([done]) > details > #content > #controls > a#download-link,
+      :host(:not([self])) > details > #content > #controls > a#trash-link,
       :host([has-torrent-id]) > details > #content > #controls > a#reset-link,
       :host(:not([updating])) > details > #content > #progress > #pause {
         display: block;
@@ -513,6 +537,7 @@ export default class Webtorrent extends Intersection() {
             <a id=pin-link><slot name=pin></slot></a>
             <a id=download-link><slot name=download></slot></a>
             <a id=reset-link><slot name=reset></slot></a>
+            <a id=trash-link><slot name=trash></slot></a>
           </div>
           <div id=progress>
             <input title="pause or resume torrent" id=pause type=checkbox checked />
@@ -583,6 +608,7 @@ export default class Webtorrent extends Intersection() {
           uid: this.getAttribute('uid'),
           timestamp: this.getAttribute('timestamp'),
           room: this.getAttribute('room'),
+          isSelf: this.hasAttribute('self'),
           torrentId: this.torrentId,
           destroyOpts: resetTorrent === true ? {destroyStore: false} : resetTorrent === 'destroyStore' ? {destroyStore: true} : undefined,
           force,
@@ -1068,6 +1094,10 @@ export default class Webtorrent extends Intersection() {
 
   get resetLink () {
     return this._resetLink || (this._resetLink = this.details.querySelector('#reset-link'))
+  }
+
+  get trashLink () {
+    return this._trashLink || (this._trashLink = this.details.querySelector('#trash-link'))
   }
 
   get keyIcon () {
