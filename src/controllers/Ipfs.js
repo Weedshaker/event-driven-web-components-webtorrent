@@ -625,6 +625,7 @@ export default class Ipfs extends HTMLElement {
    * @returns {{result: Promise<{cid: string}>, getAbortController: () => AbortController}}
    */
   add (file) {
+    // TODO: keep state of adding in progress and avoid double adding
     let abortController = new AbortController()
     const func = async () => {
       const createFileCid = async file => {

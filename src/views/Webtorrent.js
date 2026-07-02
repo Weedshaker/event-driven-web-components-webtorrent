@@ -89,7 +89,6 @@ export default class Webtorrent extends Intersection() {
 
     // Avoid DOM performance issues
     this.updateHeight = () => {
-      // todo: try aspect ratio instead of min-height once each time when loaded
       let promiseResolve
       const promise = new Promise(resolve => (promiseResolve = resolve))
       this.removeAttribute('has-height')
@@ -328,8 +327,9 @@ export default class Webtorrent extends Intersection() {
         height: 100%;
         flex: 1;
       }
-      :host([error]) ::slotted([id=error]) {
+      :host(:where([error], [deleted])) ::slotted([id=error]) {
         display: block;
+        padding: 0 0 0.15em 0;
       }
       :host {
         display: inline-block;
@@ -337,13 +337,15 @@ export default class Webtorrent extends Intersection() {
         white-space: normal;
         margin-bottom: 1.25em;
       }
-      :host:has(> details[open]) {
+      :host(:not(:where([error], [deleted]))):has(> details[open]) {
         margin-bottom: 0;
       }
       :host > details {
         display: flex;
         flex-direction: column;
         justify-content: flex-end;
+      }
+      :host(:not(:where([error], [deleted]))) > details {
         min-height: var(--view-min-height, 0);
       }
       :host([has-height]:not([intersecting])) > details {
@@ -363,10 +365,10 @@ export default class Webtorrent extends Intersection() {
         cursor: pointer;
         padding: 0.15em 0;
       }
-      :host > details[open] > summary #header {
+      :host(:not(:where([error], [deleted]))) > details[open] > summary #header {
         border-bottom: 1px dashed var(--color-secondary);
       }
-      :host > details > summary #header::after {
+      :host(:not(:where([error], [deleted]))) > details > summary #header::after {
         background: var(--color-secondary);
         clip-path: polygon(0 0, 100% 0, 50% 100%);
         color: var(--color-white);
@@ -379,7 +381,7 @@ export default class Webtorrent extends Intersection() {
         top: 100%;
         width: 40%;
       }
-      :host > details[open] > summary #header::after {
+      :host(:not(:where([error], [deleted]))) > details[open] > summary #header::after {
         content: attr(content-open, 'file info');
         clip-path: none;
         line-height: 1.75em;
@@ -424,6 +426,9 @@ export default class Webtorrent extends Intersection() {
       :host > details .pair {
         display: flex;
         flex-wrap: nowrap;
+      }
+      :host([deleted]) > details > #content {
+        display: none;
       }
       :host > details > #content > #controls {
         margin-top: 1.125em;
@@ -499,11 +504,11 @@ export default class Webtorrent extends Intersection() {
         <summary>
           <div id=header>
             <slot name=key></slot>
+            <a id=error-link><slot name=error></slot></a>
             <div id=file-name content="file info" content-open="file info"></div>
           </div>
         </summary>
         <div id=content>
-          <a id=error-link><slot name=error></slot></a>
           <div id=controls>
             <a id=pin-link><slot name=pin></slot></a>
             <a id=download-link><slot name=download></slot></a>
@@ -541,9 +546,11 @@ export default class Webtorrent extends Intersection() {
    * 
    * @param {true|false|'destroyStore'} [resetTorrent=false]
    * @param {boolean} [forceRenderToLink=false]
+   * @param {boolean} [keepScroll=false]
+   * @param {boolean} [force=false]
    * @returns {Promise<void>}
    */
-  async renderTorrent (resetTorrent = false, forceRenderToLink = false, keepScroll = false) {
+  async renderTorrent (resetTorrent = false, forceRenderToLink = false, keepScroll = false, force = false) {
     this.setAttribute('updating', '')
     clearInterval(this.intervalID)
     if (this.renderReject) {
@@ -574,9 +581,11 @@ export default class Webtorrent extends Intersection() {
       this.dispatchEvent(new CustomEvent(`${this.namespace}add`, {
         detail: {
           uid: this.getAttribute('uid'),
+          timestamp: this.getAttribute('timestamp'),
           room: this.getAttribute('room'),
           torrentId: this.torrentId,
           destroyOpts: resetTorrent === true ? {destroyStore: false} : resetTorrent === 'destroyStore' ? {destroyStore: true} : undefined,
+          force,
           resolve
         },
         bubbles: true,
@@ -588,8 +597,8 @@ export default class Webtorrent extends Intersection() {
         this.torrent = null
         this.removeAttribute('has-torrent')
         this.setAttribute('deleted', '')
-        // TODO: deleted/garbage collected - render download icon
-        console.log('*********', 'deleted torrent', this)
+        this.removeAttribute('updating')
+        this.addEventListener('click', event => this.renderTorrent(true, false, false, true), {once: true})
         return
       } else {
         this.torrent = torrent
