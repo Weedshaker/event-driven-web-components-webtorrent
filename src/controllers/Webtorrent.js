@@ -18,8 +18,8 @@ import { WebWorker } from '../event-driven-web-components-prototypes/src/WebWork
  *  progress?: number,
  *  fileTypes?: string[],
  *  length?: number, // bytes
- *  torrentFile: never[],
- *  added: {
+ *  torrentFile?: never[],
+ *  added?: {
  *    timestamp?: string,
  *    href?: string,
  *    uid?: string,
@@ -816,18 +816,18 @@ export default class Webtorrent extends WebWorker() {
         : torrentContainer.torrentFile
     }
     deleteAdded.forEach(({key, value}) => {
-      torrentContainer.added = torrentContainer.added.reduce((acc, added) => {
+      torrentContainer.added = torrentContainer.added?.reduce((acc, added) => {
         // @ts-ignore
         if (value && (isNaN(value) ? added[key] === value : Number(added[key]) === value)) return acc
         // @ts-ignore
         acc.push(added)
         return acc
-      }, [])
+      }, []) || []
     })
     // filter unique message-timestamp or rooms
     const timestamps = []
     const rooms = []
-    torrentContainer.added = torrentContainer.added.filter(added => {
+    torrentContainer.added = torrentContainer.added?.filter(added => {
       if (added.timestamp) {
         if (timestamps.includes(added.timestamp)) return false
         timestamps.push(added.timestamp)
@@ -837,7 +837,7 @@ export default class Webtorrent extends WebWorker() {
         rooms.push(added.room)
         return true
       }
-    })
+    }) || []
     access.truncate(0)
     access.write(new TextEncoder().encode(JSON.stringify(torrentContainer)), { at: 0 })
     access.flush()
