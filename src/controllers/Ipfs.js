@@ -711,11 +711,14 @@ export default class Ipfs extends HTMLElement {
     let gateway = gatewaysFiltered.find(findGatewayFunc)
     if (!gateway && ignoreError) {
       gateway = this.gateways.find(findGatewayFunc)
-      this.gateways.forEach(gateway => {
-        gateway.hasError = false
-        gateway.hasAddError = false
-      })
-      this.saveGateways()
+      clearTimeout(this.resetGatewaysTimeoutId)
+      this.resetGatewaysTimeoutId = setTimeout(() => {
+        this.gateways.forEach(gateway => {
+          gateway.hasError = false
+          gateway.hasAddError = false
+        })
+        this.saveGateways()
+      }, 1000) // cool down 1 sec. before resetting
     }
     return gateway
       ? {gateway, ignoreError}
@@ -761,6 +764,7 @@ export default class Ipfs extends HTMLElement {
 
   /**
    * Executes a function as soon as only
+   * TODO: NOTE: this triggered a freeze after returning to navigator.onLine when all fires from the queue and getGateway does reset too quick. trying now with: this.resetGatewaysTimeoutId
    * 
    * @param {()=>any} func
    * @returns {Promise<any>}
