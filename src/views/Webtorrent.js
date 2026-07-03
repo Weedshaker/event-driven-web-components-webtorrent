@@ -372,6 +372,9 @@ export default class Webtorrent extends Intersection() {
       :host([has-height]:not([intersecting])) > details {
         display: none;
       }
+      :host([has-height]:not([intersecting])) {
+        white-space: pre-line;
+      }
       :host > details > summary::marker {
         content: "";
       }
@@ -578,6 +581,8 @@ export default class Webtorrent extends Intersection() {
    */
   async renderTorrent (resetTorrent = false, forceRenderToLink = false, keepScroll = false, force = false) {
     this.setAttribute('updating', '')
+    this.doOnIntersection = null
+    this.doOffIntersection = null
     clearInterval(this.intervalID)
     if (this.renderReject) {
       this.renderReject()
@@ -626,6 +631,7 @@ export default class Webtorrent extends Intersection() {
         this.setAttribute('deleted', '')
         this.removeAttribute('updating')
         this.addEventListener('click', event => this.renderTorrent(true, false, false, true), {once: true})
+        this.updateHeight()
         return
       } else {
         this.torrent = torrent
