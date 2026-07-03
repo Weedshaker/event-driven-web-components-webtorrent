@@ -463,13 +463,13 @@ export default class Webtorrent extends Intersection() {
       :host > details > #content > #controls > a {
         line-height: 0.5em;
       }
-      :host > details > #content > #controls > :where(a#download-link, a#reset-link, a#trash-link) {
+      :host > details > #content > #controls > :where(a#download-link, a#reset-link, a#trash-link, a#pin-link) {
         display: none;
       }
       :host([done]) > details > #content > #controls > a#download-link,
       :host(:not([self]):not([deleting])) > details > #content > #controls > a#trash-link,
-      :host([has-torrent-id]) > details > #content > #controls > a#reset-link,
-      :host(:not([updating])) > details > #content > #progress > #pause {
+      :host([has-torrent-id]) > details > #content > #progress > #pause,
+      :host([has-torrent-id]) > details > #content > #controls > :where(a#reset-link, a#pin-link) {
         display: block;
       }
       :host > details > #content > #progress {
