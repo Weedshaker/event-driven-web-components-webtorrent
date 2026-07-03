@@ -445,7 +445,7 @@ export default class Webtorrent extends WebWorker() {
     // chat message got deleted, for that find the torrent and delete it
     this.chatDeletedEventListener = async event => {
       const torrentContainers = (await this.webWorker(Webtorrent.loadTorrentContainers))
-        .filter(torrentContainer => !torrentContainer.deleted && torrentContainer.added?.some(added => Number(added.timestamp) === event.detail.timestamp))
+        .filter(torrentContainer => !torrentContainer.deleted && (event.detail.infoHash ? event.detail.infoHash === torrentContainer.infoHash : torrentContainer.added?.some(added => Number(added.timestamp) === event.detail.timestamp)))
       for (const torrentContainer of torrentContainers) {
         const {torrent, error}  = await new Promise(resolve => this.webtorrentAddEventListener({
           detail: {
@@ -454,7 +454,7 @@ export default class Webtorrent extends WebWorker() {
           }
         }))
         if (!torrent || error) break
-        if (torrentContainer.added.every(added => added.timestamp === undefined || Number(added.timestamp) === event.detail.timestamp)) {
+        if (event.detail.infoHash ? event.detail.infoHash === torrentContainer.infoHash : torrentContainer.added.every(added => added.timestamp === undefined || Number(added.timestamp) === event.detail.timestamp)) {
           await Webtorrent.destroyTorrent(torrent, torrentContainer.infoHash || torrent.infoHash, {destroyStore: true})
           this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, event.detail.deleted === undefined ? 'destroyStore' : event.detail.deleted)
         } else {
@@ -612,6 +612,7 @@ export default class Webtorrent extends WebWorker() {
     document.body.addEventListener(`${this.namespace}view-torrent-error`, this.webtorrentViewTorrentErrorEventListener)
     document.body.addEventListener(`${this.namespace}view-reset-link-click`, this.webtorrentViewResetLinkClickEventListener)
     this.addEventListener('chat-deleted', this.chatDeletedEventListener)
+    this.addEventListener('webtorrent-deleted', this.chatDeletedEventListener)
     this.addEventListener('yjs-deleted-room', this.yjsDeletedRoomEventListener)
     self.addEventListener('online', this.onlineEventListener)
   }
@@ -638,6 +639,7 @@ export default class Webtorrent extends WebWorker() {
     document.body.removeEventListener(`${this.namespace}view-torrent-error`, this.webtorrentViewTorrentErrorEventListener)
     document.body.removeEventListener(`${this.namespace}view-reset-link-click`, this.webtorrentViewResetLinkClickEventListener)
     this.removeEventListener('chat-deleted', this.chatDeletedEventListener)
+    this.removeEventListener('webtorrent-deleted', this.chatDeletedEventListener)
     this.removeEventListener('yjs-deleted-room', this.yjsDeletedRoomEventListener)
     self.removeEventListener('online', this.onlineEventListener)
   }

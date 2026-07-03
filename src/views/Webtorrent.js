@@ -190,10 +190,11 @@ export default class Webtorrent extends Intersection() {
         event.preventDefault()
         event.stopPropagation()
       }
-      if (this.hasAttribute('timestamp')) {
-        this.dispatchEvent(new CustomEvent('chat-deleted', {
+      if (this.infoHash) {
+        this.setAttribute('deleting', '')
+        this.dispatchEvent(new CustomEvent(`${this.namespace}deleted`, {
           detail: {
-            timestamp: Number(this.getAttribute('timestamp')),
+            infoHash: this.infoHash,
             deleted: true // not 'destroyStore' but just delete and keep torrentContainer with deleted flag = true
           },
           bubbles: true,
@@ -463,7 +464,7 @@ export default class Webtorrent extends Intersection() {
         display: none;
       }
       :host([done]) > details > #content > #controls > a#download-link,
-      :host(:not([self])) > details > #content > #controls > a#trash-link,
+      :host(:not([self]):not([deleting])) > details > #content > #controls > a#trash-link,
       :host([has-torrent-id]) > details > #content > #controls > a#reset-link,
       :host(:not([updating])) > details > #content > #progress > #pause {
         display: block;
@@ -630,6 +631,7 @@ export default class Webtorrent extends Intersection() {
         this.torrent = torrent
         this.setAttribute('has-torrent', '')
         this.removeAttribute('deleted')
+        this.removeAttribute('deleting')
       }
       torrent.on('error', this.torrentErrorEventListener)
       const doneFunc = () => this.details.removeAttribute('open')
@@ -740,11 +742,11 @@ export default class Webtorrent extends Intersection() {
                 }
               }
             })
-            renderTarget.addEventListener('canplay', loadedEventListener, {once: true})
             if (!this.hasAttribute('no-media-resume')) renderTarget.addEventListener('timeupdate', event => this.mediaResumeMap.set(torrent.name, {
               currentTime: renderTarget.currentTime,
               timestamp: Date.now()
             }))
+            renderTarget.addEventListener('canplay', loadedEventListener, {once: true})
           } else {
             renderTarget.addEventListener('load', loadedEventListener)
           }
