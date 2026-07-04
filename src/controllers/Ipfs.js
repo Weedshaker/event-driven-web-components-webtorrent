@@ -42,7 +42,7 @@ export default class Ipfs extends HTMLElement {
 
     // set attribute namespace
     this.namespace = this.getAttribute('namespace') || 'ipfs-'
-    this.generalRequestTimeout = 10000
+    this.generalRequestTimeout = 1000000
     /** @type {GATEWAY[]} */
     this.gateways = this.hasAttribute('preset-gateways')
       ? [
