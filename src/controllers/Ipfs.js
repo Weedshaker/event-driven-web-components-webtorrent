@@ -47,6 +47,9 @@ export default class Ipfs extends HTMLElement {
     this.gateways = this.hasAttribute('preset-gateways')
       ? [
         {
+          origin: 'https://ipfs.peerweb.site',
+          supports: ['add']
+        },{
           origin: 'https://ipfs.oversas.org',
           supports: ['add', 'cat', 'web-seed', 'fetch']
         },
