@@ -686,8 +686,9 @@ export default class Webtorrent extends Intersection() {
             : torrent.done
               ? 'Seeding'
               : 'Downloading'
-          if (torrent.metadata) progressElement.setAttribute('value', 100 * torrent.progress)
-          this.headerEl.setAttribute('content', torrent.done ? this.torrentStatusEl.textContent : `${this.torrentStatusEl.textContent} - ${100 * (torrent.progress || 0)}%`)
+          const progress = (100 * torrent.progress || 0).toFixed(1)
+          if (torrent.metadata) progressElement.setAttribute('value', progress)
+          this.headerEl.setAttribute('content', torrent.done ? this.torrentStatusEl.textContent : `${this.torrentStatusEl.textContent} - ${progress}%`)
           this.headerEl.setAttribute('content-open', torrent.done ? 'file info' : this.torrentStatusEl.textContent)
           this.pauseCheckbox.checked = !torrent.paused
           if (torrent.done) {
@@ -695,7 +696,7 @@ export default class Webtorrent extends Intersection() {
           } else {
             this.removeAttribute('done')
           }
-          this.torrentProgressEl.textContent = `${(100 * torrent.progress).toFixed(1)}%`
+          this.torrentProgressEl.textContent = `${progress}%`
           this.torrentDownloadedEl.textContent = Webtorrent.formatBytes(torrent.downloaded)
           this.torrentLengthEl.textContent = Webtorrent.formatBytes(torrent.length)
           this.torrentPeersEl.textContent = `${torrent.numPeers} peer${torrent.numPeers === 1 ? '' : 's'}`
