@@ -454,7 +454,7 @@ export default class Webtorrent extends WebWorker() {
           }
         }))
         if (!torrent || error) break
-        if (event.detail.infoHash ? event.detail.infoHash === torrentContainer.infoHash : torrentContainer.added.every(added => added.timestamp === undefined || Number(added.timestamp) === event.detail.timestamp)) {
+        if (event.detail.infoHash ? event.detail.infoHash === torrentContainer.infoHash : torrentContainer.added?.every(added => added.timestamp === undefined || Number(added.timestamp) === event.detail.timestamp)) {
           await Webtorrent.destroyTorrent(torrent, torrentContainer.infoHash || torrent.infoHash, {destroyStore: true})
           this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, event.detail.deleted === undefined ? 'destroyStore' : event.detail.deleted)
         } else {
@@ -475,7 +475,7 @@ export default class Webtorrent extends WebWorker() {
           }
         }))
         if (!torrent || error) break
-        if (torrentContainer.added.every(added => added.room === undefined || event.detail.rooms.includes(added.room))) {
+        if (torrentContainer.added?.every(added => added.room === undefined || event.detail.rooms.includes(added.room))) {
           await Webtorrent.destroyTorrent(torrent, torrentContainer.infoHash || torrent.infoHash, {destroyStore: true})
           this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'destroyStore')
         } else {
@@ -596,7 +596,7 @@ export default class Webtorrent extends WebWorker() {
         this.webtorrentAddEventListener({
           detail: {
             torrentId: `${torrentContainer.magnetURI}${torrentContainer.cid ? `&cid=${torrentContainer.cid}` : ''}`,
-            uid: torrentContainer.added[0]?.uid,
+            uid: torrentContainer.added?.[0]?.uid,
             room: torrentContainer.room
           }
         })
@@ -722,7 +722,7 @@ export default class Webtorrent extends WebWorker() {
       if (navigatorUsage > quota) {
         const torrentContainers = (await this.webWorker(Webtorrent.loadTorrentContainers))
           .filter(torrentContainer => !torrentContainer.pinned && !torrentContainer.deleted)
-          .sort((a, b) => (a.added[0]?.timestamp || 0) - (b.added[0]?.timestamp || 0))
+          .sort((a, b) => (a.added?.[0]?.timestamp || 0) - (b.added?.[0]?.timestamp || 0))
         let usage = navigatorUsage
         for (const torrentContainer of torrentContainers) {
           if (usage < quota) break
