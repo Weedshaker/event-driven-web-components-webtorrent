@@ -243,7 +243,7 @@ export default class Webtorrent extends WebWorker() {
       } else if (cid) {
         // try to get the torrent through ipfs
         const torrentFile = (await new Promise(resolve => {
-          setTimeout(() => resolve(null), 6000)
+          setTimeout(() => resolve(null), 10000)
           this.dispatchEvent(new CustomEvent('ipfs-get-torrent-file', {
             detail: {
               cid,
