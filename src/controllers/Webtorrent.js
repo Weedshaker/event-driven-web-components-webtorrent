@@ -242,15 +242,18 @@ export default class Webtorrent extends WebWorker() {
         torrentId = new Uint8Array(torrentContainer.torrentFile)
       } else if (cid) {
         // try to get the torrent through ipfs
-        const torrentFile = (await new Promise(resolve => this.dispatchEvent(new CustomEvent('ipfs-get-torrent-file', {
-          detail: {
-            cid,
-            resolve
-          },
-          bubbles: true,
-          cancelable: true,
-          composed: true
-        })))).torrentFile
+        const torrentFile = (await new Promise(resolve => {
+          setTimeout(() => resolve(null), 6000)
+          this.dispatchEvent(new CustomEvent('ipfs-get-torrent-file', {
+            detail: {
+              cid,
+              resolve
+            },
+            bubbles: true,
+            cancelable: true,
+            composed: true
+          }))
+        }))?.torrentFile
         if (torrentFile) torrentId = torrentFile
       }
       const torrent = client.add(torrentId, Object.assign(event.detail.opts || {}, await this.addOpts))
@@ -541,6 +544,7 @@ export default class Webtorrent extends WebWorker() {
       clientDestroyedResolve(null)
       return this.clientDestroyedPromise
     }
+    // consider: this.streamToServerReadyPromise.unregister(), if trouble
     client.destroy(error => {
       Webtorrent.#torrentMap.clear()
       // init is going to fill this Promise

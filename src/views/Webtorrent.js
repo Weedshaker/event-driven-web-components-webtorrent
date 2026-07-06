@@ -467,7 +467,7 @@ export default class Webtorrent extends Intersection() {
         display: none;
       }
       :host([done]) > details > #content > #controls > a#download-link,
-      :host(:not([self]):not([deleting])) > details > #content > #controls > a#trash-link,
+      :host([has-torrent]:not([self]):not([deleting])) > details > #content > #controls > a#trash-link,
       :host([has-torrent-id]) > details > #content > #progress > #pause,
       :host([has-torrent-id]) > details > #content > #controls > :where(a#reset-link, a#pin-link) {
         display: block;
@@ -668,15 +668,19 @@ export default class Webtorrent extends Intersection() {
           // is torrent stalled without activity for some time?
           // is it the first torrent render and no metadata after first activity for some time?
           if (!torrent.done && !torrent.paused && torrent.numPeers > 0 && !torrent.downloadSpeed && !torrent.uploadSpeed && ((lastActivity + this.stallTimeout) < Date.now() || (this.renderedTorrent <= 3 && !torrent.metadata && (firstActivity + this.stallTimeout) < Date.now()))) {
-            this.dispatchEvent(new CustomEvent(`${this.namespace}view-is-stalled`, {
-              detail: {
-                torrent,
-                torrentId: this.torrentId
-              },
-              bubbles: true,
-              cancelable: true,
-              composed: true
-            }))
+            if (!torrent.metadata && this.renderedTorrent === 2) {
+              this.renderTorrent(true)
+            } else {
+              this.dispatchEvent(new CustomEvent(`${this.namespace}view-is-stalled`, {
+                detail: {
+                  torrent,
+                  torrentId: this.torrentId
+                },
+                bubbles: true,
+                cancelable: true,
+                composed: true
+              }))
+            }
             activityFunc()
           }
           this.torrentStatusEl.textContent = torrent.paused
