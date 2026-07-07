@@ -571,8 +571,11 @@ export default class Webtorrent extends WebWorker() {
       clientDestroyedResolve(null)
       return this.clientDestroyedPromise
     }
-    // consider: this.streamToServerReadyPromise.unregister(), if trouble
-    client.destroy(error => {
+    client.destroy(async error => {
+      if (this.streamToServerReadyPromise.done) {
+        await (await this.streamToServerReadyPromise).unregister()
+        this.streamToServerReadyPromise.done = false
+      }
       Webtorrent.#torrentMap.clear()
       // init is going to fill this Promise
       this.setClientPromise()
