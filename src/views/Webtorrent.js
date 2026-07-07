@@ -381,6 +381,13 @@ export default class Webtorrent extends Intersection() {
       :host > details > summary > figure {
         margin: 0 0 1em;
       }
+      :host > details > summary > a {
+        display: block;
+        border: 1px dotted var(--color-secondary);
+        margin: 1em 0;
+        padding: 1em;
+        text-decoration: underline;
+      }
       :host > details > summary #header {
         border-bottom: 1px solid var(--color-secondary);
         border-top: 1px solid var(--color-secondary);
@@ -862,8 +869,8 @@ export default class Webtorrent extends Intersection() {
 
   async _renderFileTo (file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, keyContainer, tagName = '', append = true) {
     // streamTo and streamURL only work when service worker is up and running
-    const setHref = async target => {
-      if (streamToServerReadyPromise.done && !/OS 16_/.test(navigator.userAgent)) {
+    const setHref = async (target, useStreamURL = true) => {
+      if (useStreamURL && streamToServerReadyPromise.done && !/OS 16_/.test(navigator.userAgent)) {
         target.setAttribute('href', file.streamURL)
       } else {
         target.setAttribute('href', URL.createObjectURL(await this.getBlob(file, keyContainer)))
@@ -875,7 +882,7 @@ export default class Webtorrent extends Intersection() {
     if (append) targetContainer.prepend(appendTarget)
     if (tagName === 'a') {
       renderTarget.setAttribute('target', '_blank')
-      setHref(renderTarget)
+      setHref(renderTarget, false)
       renderTarget.setAttribute('download', file.name)
       renderTarget.textContent = file.name
     } else if (tagName === 'track') {
@@ -996,12 +1003,14 @@ export default class Webtorrent extends Intersection() {
   }
 
   static getTagNameByMimeType (type, path) {
-    const match = path.match(/\.[a-z]{3}$/)
-    if (match?.[0]) {
-      if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.avif', '.svg', '.ico'].includes(match[0])) return ['img', 'src']
-      if (['.mp4', '.mkv', '.mov', '.avi', '.wmv', '.flv', '.webm', '.divx'].includes(match[0])) return ['video', 'src']
-      if (['.mp3', '.wav', '.ogg', '.oga', '.aac', '.m4a', '.flac'].includes(match[0])) return ['audio', 'src']
-      if (['.pdf', '.html', '.htm', '.svg', '.xml', '.txt'].includes(match[0])) return ['embed', 'src']
+    const match = path.split(/[?#]/)[0].match(/\.([a-zA-Z0-9]+)$/)
+    const ext = match?.[0]?.toLowerCase()
+    if (ext) {
+      if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.avif', '.svg', '.ico'].includes(ext)) return ['img', 'src']
+      if (['.mp4', '.mkv', '.mov', '.avi', '.wmv', '.flv', '.webm', '.divx'].includes(ext)) return ['video', 'src']
+      if (['.mp3', '.wav', '.ogg', '.oga', '.aac', '.m4a', '.flac'].includes(ext)) return ['audio', 'src']
+      if (['.pdf', '.html', '.htm', '.xml', '.txt'].includes(ext)) return ['embed', 'src']
+      if (['.srt', '.ttml', '.dfxp', '.sbv', '.sub', '.ssa', '.ass'].includes(ext)) return ['track', 'src']
     }
     return type.includes('image')
       ? ['img', 'src']
@@ -1011,9 +1020,7 @@ export default class Webtorrent extends Intersection() {
           ? ['audio', 'src']
           : type.includes('pdf')
             ? ['embed', 'src']
-            : type.includes('stream')
-              ? ['track', 'src']
-              : ['a', 'href']
+            : ['a', 'href']
   }
 
   static formatBytes(bytes, isPerSecond = false) {
