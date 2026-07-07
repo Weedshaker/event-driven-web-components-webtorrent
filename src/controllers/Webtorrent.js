@@ -238,25 +238,52 @@ export default class Webtorrent extends WebWorker() {
       // basically the same as onInfoHash
       Webtorrent.#torrentMap.set(infoHash, new Promise(resolve => (torrentMapResolve = resolve)))
       let torrentId = event.detail.torrentId
+      let torrent = null
       if (torrentContainer?.torrentFile) {
         torrentId = new Uint8Array(torrentContainer.torrentFile)
+      } else if (event.detail.torrentFile) {
+        torrentId = event.detail.torrentFile
       } else if (cid) {
         // try to get the torrent through ipfs
-        const torrentFile = (await new Promise(resolve => {
+        const getTorrentFilePromise = new Promise(resolve => this.dispatchEvent(new CustomEvent('ipfs-get-torrent-file', {
+          detail: {
+            cid,
+            resolve
+          },
+          bubbles: true,
+          cancelable: true,
+          composed: true
+        })))
+        const getTorrentFilePromiseWithMaxTimeout = new Promise(resolve => {
+          getTorrentFilePromise.then(result => resolve(result))
           setTimeout(() => resolve(null), 10000)
-          this.dispatchEvent(new CustomEvent('ipfs-get-torrent-file', {
-            detail: {
-              cid,
-              resolve
-            },
-            bubbles: true,
-            cancelable: true,
-            composed: true
-          }))
-        }))?.torrentFile
-        if (torrentFile) torrentId = torrentFile
+        })
+        const torrentFile = (await getTorrentFilePromiseWithMaxTimeout)?.torrentFile
+        if (torrentFile) {
+          torrentId = torrentFile
+        } else {
+          // if ipfs could not cat/fetch the file within the timeout, we would digest it later and reset the torrent with destroyOpts=true
+          getTorrentFilePromise.then(result => {
+            if (result?.torrentFile && !torrent?.torrentFile) {
+              this.webtorrentAddEventListener({
+                detail: {
+                  torrentId: event.detail.torrentId,
+                  uid: event.detail.uid,
+                  room: event.detail.room,
+                  resetResume: event.detail.resetResume,
+                  force: event.detail.force,
+                  opts: event.detail.opts,
+                  isSelf: event.detail.isSelf,
+                  timestamp: event.detail.timestamp,
+                  destroyOpts: true,
+                  torrentFile: result.torrentFile
+                }
+              })
+            }
+          })
+        }
       }
-      const torrent = client.add(torrentId, Object.assign(event.detail.opts || {}, await this.addOpts))
+      torrent = client.add(torrentId, Object.assign(event.detail.opts || {}, await this.addOpts))
       if (torrentContainer?.paused) torrent.pause()
       /** @type {WEBTORRENT_ADD_SEED_RESULT} */
       const result = {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise, uid: event.detail.uid, room: event.detail.room, cid, resetResume: event.detail.resetResume, pinned: torrentContainer?.pinned}
@@ -571,7 +598,9 @@ export default class Webtorrent extends WebWorker() {
           torrentId: `${resumeTorrent?.torrent.magnetURI}${resumeTorrent?.cid ? `&cid=${resumeTorrent.cid}` : ''}`,
           uid: resumeTorrent?.uid,
           room: resumeTorrent?.room,
-          resetResume: resumeTorrent?.resetResume
+          cid: resumeTorrent?.cid,
+          resetResume: resumeTorrent?.resetResume,
+          pinned: resumeTorrent?.pinned
         }
       }))
       this.dispatchEvent(new CustomEvent(`${this.namespace}did-reset`, {
@@ -600,8 +629,11 @@ export default class Webtorrent extends WebWorker() {
         this.webtorrentAddEventListener({
           detail: {
             torrentId: `${torrentContainer.magnetURI}${torrentContainer.cid ? `&cid=${torrentContainer.cid}` : ''}`,
+            isSelf: torrentContainer.isSelf,
             uid: torrentContainer.added?.[0]?.uid,
-            room: torrentContainer.room
+            room: torrentContainer.room,
+            cid: torrentContainer?.cid,
+            timestamp: torrentContainer.added?.[0]?.timestamp
           }
         })
       }
