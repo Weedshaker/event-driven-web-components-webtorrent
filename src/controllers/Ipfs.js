@@ -48,7 +48,7 @@ export default class Ipfs extends HTMLElement {
       ? [
         {
           origin: 'https://ipfs.peerweb.site',
-          supports: ['add']
+          supports: ['add', 'cat']
         },{
           origin: 'https://ipfs.oversas.org',
           supports: ['add', 'cat', 'web-seed', 'fetch']
