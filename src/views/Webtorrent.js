@@ -932,7 +932,7 @@ export default class Webtorrent extends Intersection() {
         })
         if (!decryptedStream) return await file.blob()
         return await new Response(decryptedStream, {
-          headers: { 'Content-Type': 'application/octet-stream' }
+          headers: { 'Content-Type': file.type || 'application/octet-stream' }
         }).blob()
       } else {
         // TODO: fallback view if no key
