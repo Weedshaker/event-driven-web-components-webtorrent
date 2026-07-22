@@ -278,7 +278,7 @@ export default class Ipfs extends HTMLElement {
     const filesCidMetadata = []
     // upload files and collect metadata
     await Promise.all(Ipfs.createFileListArray(inputFiles, torrent).map(async (file, i) => {
-      filesCidMetadata.push(Ipfs.createFileMetadata(inputFiles, torrent, await this.add(file).result, i))
+      filesCidMetadata.push(Ipfs.createFileMetadata(inputFiles, torrent, await this.add(file, torrent).result, i))
     }))
     return (await this.add(Ipfs.createFileListJsonFile(filesCidMetadata)).result).cid.toString() 
   }
@@ -630,9 +630,10 @@ export default class Ipfs extends HTMLElement {
    * @kind method
    * @memberof Ipfs
    * @param {{path: string, content: ReadableStream}|File} file
+   * @param {any} [torrent=null]
    * @returns {{result: Promise<{cid: string}>, getAbortController: () => AbortController}}
    */
-  add (file) {
+  add (file, torrent = null) {
     // TODO: keep state of adding in progress and avoid double adding
     let abortController = new AbortController()
     const func = async () => {
@@ -662,25 +663,84 @@ export default class Ipfs extends HTMLElement {
       if (gatewayResult.gateway?.client) {
         const client = gatewayResult.gateway.client
         try {
+          if (torrent) {
+            torrent.ipfsStatus = 'progress'
+            this.dispatchEvent(new CustomEvent(`${this.namespace}progress-${torrent.infoHash}`, {
+              detail: {
+                status: 'progress',
+                file,
+                torrent,
+                bytesUploaded: 0,
+                gateway: gatewayResult.gateway,
+              },
+              bubbles: true,
+              cancelable: true,
+              composed: true
+            }))
+          }
           const result = await client.add(file, {
             pin: true,
             cidVersion: this.cidVersion,
             rawLeaves: this.rawLeaves,
             wrapWithDirectory: false,
-            timeout: this.generalRequestTimeout
+            timeout: this.generalRequestTimeout,
+            progress: torrent
+              ? (...args) => {
+                torrent.ipfsStatus = 'progress'
+                this.dispatchEvent(new CustomEvent(`${this.namespace}progress-${torrent.infoHash}`, {
+                  detail: {
+                    status: torrent.ipfsStatus,
+                    file,
+                    torrent,
+                    bytesUploaded: args[0],
+                    path: args[1],
+                    gateway: gatewayResult.gateway,
+                  },
+                  bubbles: true,
+                  cancelable: true,
+                  composed: true
+                }))
+              }
+              : null
           })
-          // TODO: when doing input add dialog... add progress function as property in the add options, to track how much is added
-          // TODO: progress - function - undefined - Called with (bytes, path) as bytes are added
-          // TODO: input add dialog listen to client.add error 413 Request Entity Too Large to propose alternative gateway
+          if (torrent) {
+            torrent.ipfsStatus = 'done'
+            this.dispatchEvent(new CustomEvent(`${this.namespace}done-${torrent.infoHash}`, {
+              detail: {
+                status: torrent.ipfsStatus,
+                file,
+                torrent,
+                gateway: gatewayResult.gateway,
+              },
+              bubbles: true,
+              cancelable: true,
+              composed: true
+            }))
+          }
           this.setGatewayError(gatewayResult.gateway, 'hasAddError', false)
           return result
         } catch (error) {
+          if (torrent) {
+            torrent.ipfsStatus = 'error'
+            this.dispatchEvent(new CustomEvent(`${this.namespace}error-${torrent.infoHash}`, {
+              detail: {
+                status: torrent.ipfsStatus,
+                file,
+                torrent,
+                error,
+                gateway: gatewayResult.gateway,
+              },
+              bubbles: true,
+              cancelable: true,
+              composed: true
+            }))
+          }
           if (error.name === 'AbortError') {
             return createFileCid(file)
           } else {
             this.setGatewayError(gatewayResult.gateway, 'hasAddError', true)
             if (!gatewayResult.ignoreError) {
-              const addResult = this.add(file)
+              const addResult = this.add(file, torrent)
               abortController = addResult.getAbortController()
               return addResult.result
             } else {

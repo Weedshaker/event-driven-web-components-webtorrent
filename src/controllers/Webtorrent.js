@@ -290,19 +290,7 @@ export default class Webtorrent extends WebWorker() {
       torrentMapResolve(result)
       // save to storage
       this.onReady(torrent, event.detail.uid, event.detail.room, event.detail.timestamp, cid, event.detail.isSelf || false, undefined, false)
-      // upload to ipfs || wait until done, on stream did not work so far
-      torrent.on('done', () => {
-        // this function has to be called from time to time, cleaning OPFS
-        this.estimateAndRemoveExceedingEntries()
-        if (cid && !torrent.paused) this.dispatchEvent(new CustomEvent('ipfs-seed', {
-          detail: {
-            torrent
-          },
-          bubbles: true,
-          cancelable: true,
-          composed: true
-        }))
-      })
+      this.onDone(torrent, cid)
       this.onError(torrent)
       this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, result, result.torrent, () => {
         // inform ipfs about this cid to addWebSeed to the torrent when torrent.on 'infoHash'
@@ -729,7 +717,7 @@ export default class Webtorrent extends WebWorker() {
   }
 
   onInfoHash (torrent, uid, room, cid, resetResume) {
-    torrent.on('infoHash', () => {
+    const infoHashFuc = () => {
       const infoHash = torrent.infoHash.toLowerCase()
       Webtorrent.#torrentMap.set(infoHash, Promise.resolve({torrent, streamToServerReadyPromise: this.streamToServerReadyPromise, uid, room, cid, resetResume}))
       this.dispatchEvent(new CustomEvent(`${this.namespace}${infoHash}`, {
@@ -740,11 +728,42 @@ export default class Webtorrent extends WebWorker() {
         cancelable: true,
         composed: true
       }))
-    })
+    }
+    if (torrent.infoHash) {
+      infoHashFuc()
+    } else {
+      torrent.on('infoHash', infoHashFuc)
+    }
   }
 
   onReady (torrent, uid, room, timestamp, cid, isSelf, paused, deleted) {
-    torrent.on('ready', () => this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), location.href, uid, room, timestamp, cid, isSelf, undefined, paused, deleted))
+    const readyFunc = () => this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), location.href, uid, room, timestamp, cid, isSelf, undefined, paused, deleted)
+    if (torrent.ready) {
+      readyFunc()
+    } else {
+      torrent.on('ready', readyFunc)
+    }
+  }
+
+  onDone (torrent, cid) {
+    // upload to ipfs || wait until done, on stream did not work so far
+    const doneFunc = () => {
+      // this function has to be called from time to time, cleaning OPFS
+      this.estimateAndRemoveExceedingEntries()
+      if (cid && !torrent.paused) this.dispatchEvent(new CustomEvent('ipfs-seed', {
+        detail: {
+          torrent
+        },
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      }))
+    }
+    if (torrent.done) {
+      doneFunc()
+    } else {
+      torrent.on('done', doneFunc)
+    }
   }
 
   onError (torrent) {

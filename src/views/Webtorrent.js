@@ -213,6 +213,42 @@ export default class Webtorrent extends Intersection() {
 
     this.webtorrentInfoHashEventListener = event => this.renderTorrent()
 
+    let ipfsDone = false
+    const ipfsProgressMap = new Map()
+    this.ipfsStatusEventListener = event => {
+      if (typeof this.activityFunc === 'function') this.activityFunc()
+      if (ipfsDone) return
+      const bytesUploaded = (ipfsProgressMap.has(event.detail.gateway.origin) && event.detail.bytesUploaded !== undefined
+            ? ipfsProgressMap.get(event.detail.gateway.origin) + event.detail.bytesUploaded
+            : event.detail.bytesUploaded) || 0
+      const status = bytesUploaded >= event.detail.torrent.length
+        ? 'done'
+        : event.detail.status
+      switch (status) {
+        case 'progress':
+          if (event.detail.gateway.origin === 'ipfs') break
+          ipfsProgressMap.set(event.detail.gateway.origin, bytesUploaded)
+          this.ipfsStatusEl.textContent = `Uploading to ${event.detail.gateway.origin}`
+          this.ipfsProgressEl.textContent = `${(bytesUploaded / event.detail.torrent.length *100).toFixed(1)}%`
+          this.ipfsUploadedEl.textContent = Webtorrent.formatBytes(bytesUploaded)
+          this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
+          break
+        case 'done':
+          ipfsDone = true
+          this.ipfsStatusEl.textContent = `Uploaded to ${event.detail.gateway.origin}`
+          this.ipfsProgressEl.textContent = '100%'
+          this.ipfsUploadedEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
+          this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
+          break
+        case 'error':
+          this.ipfsStatusEl.textContent = `Failed to upload to ${event.detail.gateway.origin}`
+          this.ipfsProgressEl.textContent = '0%'
+          this.ipfsUploadedEl.textContent = '0'
+          this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
+          break
+      }
+    }
+
     // this updates the min-height on resize, see updateHeight function for more info
     let resizeTimeout = null
     this.resizeEventListener = event => {
@@ -237,7 +273,12 @@ export default class Webtorrent extends Intersection() {
     this.trashLink.addEventListener('click', this.trashClickLinkEventListener)
     self.addEventListener('resize', this.resizeEventListener)
     document.body.addEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
-    if (this.infoHash) document.body.addEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
+    if (this.infoHash) {
+      document.body.addEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
+      document.body.addEventListener(`ipfs-progress-${this.infoHash}`, this.ipfsStatusEventListener)
+      document.body.addEventListener(`ipfs-done-${this.infoHash}`, this.ipfsStatusEventListener)
+      document.body.addEventListener(`ipfs-error-${this.infoHash}`, this.ipfsStatusEventListener)
+    }
     if (this.isConnected) this.connectedCallbackOnce()
   }
 
@@ -284,7 +325,12 @@ export default class Webtorrent extends Intersection() {
     this.trashLink.removeEventListener('click', this.trashClickLinkEventListener)
     self.removeEventListener('resize', this.resizeEventListener)
     document.body.removeEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
-    if (this.infoHash) document.body.removeEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
+    if (this.infoHash) {
+      document.body.removeEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
+      document.body.removeEventListener(`ipfs-progress-${this.infoHash}`, this.ipfsStatusEventListener)
+      document.body.removeEventListener(`ipfs-done-${this.infoHash}`, this.ipfsStatusEventListener)
+      document.body.removeEventListener(`ipfs-error-${this.infoHash}`, this.ipfsStatusEventListener)
+    }
   }
 
   intersectionCallback (entries, observer) {
@@ -347,6 +393,9 @@ export default class Webtorrent extends Intersection() {
         display: none;
         height: 100%;
         flex: 1;
+      }
+      .info-title {
+        text-decoration: underline;
       }
       :host(:where([error], [deleted])) ::slotted([id=error]) {
         display: block;
@@ -554,6 +603,7 @@ export default class Webtorrent extends Intersection() {
             <input title="pause or resume torrent" id=pause type=checkbox checked />
             <div id=progress-bar></div>
           </div>
+          <div class="info-title">webtorrent (ipfs cat):</div>
           <div id=progress-info>
             <div id=torrent-status></div>
             <div id=torrent-progress></div>
@@ -569,6 +619,17 @@ export default class Webtorrent extends Intersection() {
               <div id=torrent-upload-speed></div>
             </div>
             <div id=torrent-time-remaining></div>
+          </div>
+          <hr>
+          <div class="info-title">ipfs add:</div>
+          <div id=progress-info>
+            <div id=ipfs-status>No information...</div>
+            <div id=ipfs-progress></div>
+            <div class=pair>
+              <div id=ipfs-uploaded></div>
+              <span>&nbsp;/&nbsp;</span>
+              <div id=ipfs-length></div>
+            </div>
           </div>
         </div>
       </details>
@@ -653,7 +714,7 @@ export default class Webtorrent extends Intersection() {
       this.renderedTorrent++
       const firstActivity = Date.now()
       let lastActivity = Date.now()
-      const activityFunc = () => (lastActivity = Date.now())
+      const activityFunc = this.activityFunc = () => (lastActivity = Date.now())
       torrent.on('download', activityFunc)
       torrent.on('upload', activityFunc)
       torrent.on('wire', activityFunc)
@@ -714,6 +775,11 @@ export default class Webtorrent extends Intersection() {
           this.torrentDownloadSpeedEl.innerHTML = `&darr;${Webtorrent.formatBytes(torrent.downloadSpeed, true)}`
           this.torrentUploadSpeedEl.innerHTML = `&uarr;${Webtorrent.formatBytes(torrent.uploadSpeed, true)}`
           this.torrentTimeRemainingEl.textContent = torrent.timeRemaining ? `${Webtorrent.formatTimeRemaining(torrent.timeRemaining)} remaining` : ''
+          if (torrent.ipfsStatus) this.ipfsStatusEventListener({detail: {
+            status: torrent.ipfsStatus,
+            torrent,
+            gateway: {origin: 'ipfs'},
+          }})
         }
         intervalFunc()
         clearInterval(this.intervalID)
@@ -1064,16 +1130,32 @@ export default class Webtorrent extends Intersection() {
     return this._torrentStatusEl || (this._torrentStatusEl = this.details.querySelector('#torrent-status'))
   }
 
+  get ipfsStatusEl () {
+    return this._ipfsStatusEl || (this._ipfsStatusEl = this.details.querySelector('#ipfs-status'))
+  }
+
   get torrentProgressEl () {
     return this._torrentProgressEl || (this._torrentProgressEl = this.details.querySelector('#torrent-progress'))
+  }
+
+  get ipfsProgressEl () {
+    return this._ipfsProgressEl || (this._ipfsProgressEl = this.details.querySelector('#ipfs-progress'))
   }
 
   get torrentDownloadedEl () {
     return this._torrentDownloadedEl || (this._torrentDownloadedEl = this.details.querySelector('#torrent-downloaded'))
   }
 
+  get ipfsUploadedEl () {
+    return this._ipfsUploadedEl || (this._ipfsUploadedEl = this.details.querySelector('#ipfs-uploaded'))
+  }
+
   get torrentLengthEl () {
     return this._torrentLengthEl || (this._torrentLengthEl = this.details.querySelector('#torrent-length'))
+  }
+
+  get ipfsLengthEl () {
+    return this._ipfsLengthEl || (this._ipfsLengthEl = this.details.querySelector('#ipfs-length'))
   }
 
   get torrentPeersEl () {
