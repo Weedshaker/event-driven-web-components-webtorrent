@@ -25,6 +25,7 @@ export default class Webtorrent extends Intersection() {
     if (this.torrentId) this.setAttribute('has-torrent-id', '')
     const torrentIdUrl = new URL(this.torrentId)
     this.keyEpoch = torrentIdUrl.searchParams.get('key-epoch')
+    if (this.keyEpoch) this.setAttribute('has-key', '')
     this.iv = torrentIdUrl.searchParams.get('iv')
     this.fileName = torrentIdUrl.searchParams.get('dn')
     let xt
@@ -204,6 +205,35 @@ export default class Webtorrent extends Intersection() {
       }
     }
 
+    this.deletedClickEventListener = event => this.renderTorrent(true, false, false, true)
+
+    this.keysEventListener = async event => {
+      if (event.detail.error) return
+      let keyContainersAreIdentical
+      // yjs-new-key
+      if (event.detail.newKey) {
+        if (event.detail.newKey.key.epoch !== this.keyEpoch) return
+        keyContainersAreIdentical = false
+        this.keyContainer = Promise.resolve(event.detail.newKey)
+      }
+      // yjs-key-deleted
+      if (Array.isArray(event.detail.deleted)) {
+        // @ts-ignore
+        if (event.detail.deleted.every(deletedKeyContainer => deletedKeyContainer.key.epoch !== this.keyEpoch)) return
+        keyContainersAreIdentical = false
+        this.keyContainer = Promise.resolve(null)
+      }
+      // yjs-received-key
+      if (event.detail.decrypted) {
+        if (event.detail.decrypted.key.epoch !== this.keyEpoch) return
+        const oldKeyContainer = await this.keyContainer
+        const newKeyContainer = event.detail.decrypted
+        keyContainersAreIdentical = oldKeyContainer?.disabled === newKeyContainer?.disabled && oldKeyContainer?.public.name === newKeyContainer?.public.name && oldKeyContainer?.private.name === newKeyContainer?.private.name
+        this.keyContainer = Promise.resolve(newKeyContainer)
+      }
+      if (!keyContainersAreIdentical) this.renderTorrent()
+    }
+
     this.webtorrentDidResetEventListener = event => {
       clearTimeout(errorTimeoutID)
       this.hadFileError = false
@@ -272,12 +302,12 @@ export default class Webtorrent extends Intersection() {
     this.resetLink.addEventListener('click', this.resetClickLinkEventListener)
     this.trashLink.addEventListener('click', this.trashClickLinkEventListener)
     self.addEventListener('resize', this.resizeEventListener)
-    document.body.addEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
+    this.globalEventTarget.addEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
     if (this.infoHash) {
-      document.body.addEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
-      document.body.addEventListener(`ipfs-progress-${this.infoHash}`, this.ipfsStatusEventListener)
-      document.body.addEventListener(`ipfs-done-${this.infoHash}`, this.ipfsStatusEventListener)
-      document.body.addEventListener(`ipfs-error-${this.infoHash}`, this.ipfsStatusEventListener)
+      this.globalEventTarget.addEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
+      this.globalEventTarget.addEventListener(`ipfs-progress-${this.infoHash}`, this.ipfsStatusEventListener)
+      this.globalEventTarget.addEventListener(`ipfs-done-${this.infoHash}`, this.ipfsStatusEventListener)
+      this.globalEventTarget.addEventListener(`ipfs-error-${this.infoHash}`, this.ipfsStatusEventListener)
     }
     if (this.isConnected) this.connectedCallbackOnce()
   }
@@ -294,21 +324,6 @@ export default class Webtorrent extends Intersection() {
         composed: true
       })))
       : Promise.resolve(null)
-    this.keyContainer.then(keyContainer => {
-      if (keyContainer) {
-        this.setAttribute('has-key', '')
-        let assignedElement
-        if (assignedElement = this.keyIcon.assignedElements()?.[0]) {
-          // reset the key element with all the attributes already set plus key epoch and public-name
-          const replacement = document.createElement(assignedElement.tagName)
-          Array.from(assignedElement.attributes).forEach(attribute => replacement.setAttribute(attribute.name, attribute.value))
-          replacement.setAttribute('epoch', keyContainer.key.epoch)
-          replacement.setAttribute('public-name', keyContainer.public.name)
-          replacement.setAttribute('title', 'File successfully decrypted!')
-          assignedElement.replaceWith(replacement)
-        }
-      }
-    })
     this.renderTorrent(false, false, true)
     // @ts-ignore
     this.connectedCallbackOnce = () => {}
@@ -324,12 +339,12 @@ export default class Webtorrent extends Intersection() {
     this.resetLink.removeEventListener('click', this.resetClickLinkEventListener)
     this.trashLink.removeEventListener('click', this.trashClickLinkEventListener)
     self.removeEventListener('resize', this.resizeEventListener)
-    document.body.removeEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
+    this.globalEventTarget.removeEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
     if (this.infoHash) {
-      document.body.removeEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
-      document.body.removeEventListener(`ipfs-progress-${this.infoHash}`, this.ipfsStatusEventListener)
-      document.body.removeEventListener(`ipfs-done-${this.infoHash}`, this.ipfsStatusEventListener)
-      document.body.removeEventListener(`ipfs-error-${this.infoHash}`, this.ipfsStatusEventListener)
+      this.globalEventTarget.removeEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
+      this.globalEventTarget.removeEventListener(`ipfs-progress-${this.infoHash}`, this.ipfsStatusEventListener)
+      this.globalEventTarget.removeEventListener(`ipfs-done-${this.infoHash}`, this.ipfsStatusEventListener)
+      this.globalEventTarget.removeEventListener(`ipfs-error-${this.infoHash}`, this.ipfsStatusEventListener)
     }
   }
 
@@ -389,7 +404,7 @@ export default class Webtorrent extends Intersection() {
       ::slotted([id=reset]) {
         cursor: pointer;
       }
-      ::slotted([id=error]) {
+      ::slotted([id=error]), ::slotted([id=deleted]), ::slotted([id=request-key]) {
         display: none;
         height: 100%;
         flex: 1;
@@ -397,7 +412,18 @@ export default class Webtorrent extends Intersection() {
       .info-title {
         text-decoration: underline;
       }
-      :host(:where([error], [deleted])) ::slotted([id=error]) {
+      :host([error]) ::slotted([id=error]) {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: var(--color-error);
+        padding: 0 0 0.15em 0;
+      }
+      :host([deleted]:not([request-key])) ::slotted([id=deleted]) {
+        display: block;
+        padding: 0 0 0.15em 0;
+      }
+      :host([request-key]) ::slotted([id=request-key]) {
         display: block;
         padding: 0 0 0.15em 0;
       }
@@ -407,7 +433,7 @@ export default class Webtorrent extends Intersection() {
         white-space: normal;
         margin-bottom: 1.25em;
       }
-      :host(:not(:where([error], [deleted]))):has(> details[open]) {
+      :host(:not(:where([error], [deleted], [request-key]))):has(> details[open]) {
         margin-bottom: 0;
       }
       :host > details {
@@ -415,7 +441,7 @@ export default class Webtorrent extends Intersection() {
         flex-direction: column;
         justify-content: flex-end;
       }
-      :host(:not(:where([error], [deleted]))) > details {
+      :host(:not(:where([error], [deleted], [request-key]))) > details {
         min-height: var(--view-min-height, 0);
       }
       :host([has-height]:not([intersecting])) > details {
@@ -445,10 +471,10 @@ export default class Webtorrent extends Intersection() {
         cursor: pointer;
         padding: 0.15em 0;
       }
-      :host(:not(:where([error], [deleted]))) > details[open] > summary #header {
+      :host(:not(:where([error], [deleted], [request-key]))) > details[open] > summary #header {
         border-bottom: 1px dashed var(--color-secondary);
       }
-      :host(:not(:where([error], [deleted]))) > details > summary #header::after {
+      :host(:not(:where([error], [deleted], [request-key]))) > details > summary #header::after {
         background: var(--color-secondary);
         clip-path: polygon(0 0, 100% 0, 50% 100%);
         color: var(--color-white);
@@ -461,7 +487,7 @@ export default class Webtorrent extends Intersection() {
         top: 100%;
         width: 40%;
       }
-      :host(:not(:where([error], [deleted]))) > details[open] > summary #header::after {
+      :host(:not(:where([error], [deleted], [request-key]))) > details[open] > summary #header::after {
         content: attr(content-open, 'file info');
         clip-path: none;
         line-height: 1.75em;
@@ -472,16 +498,16 @@ export default class Webtorrent extends Intersection() {
       :host > details > summary #header > #file-name {
         line-height: 1em;
       }
-      :host([has-key]) > details > summary #header > [name=key] {
+      :host([has-key]:not([request-key]):not([deleted])) > details > summary #header > [name=key] {
         display: contents;
       }
-      :host([has-key]) > details > summary #header {
+      :host([has-key]:not([request-key]):not([deleted])) > details > summary #header {
         flex: 1;
         display: flex;
         min-height: 2em;
         align-items: flex-end;
       }
-      :host([has-key]) > details > summary #header > #file-name {
+      :host([has-key]:not([request-key]):not([deleted])) > details > summary #header > #file-name {
         align-self: flex-start;
         width: calc(100% - 3.5em);
       }
@@ -510,7 +536,7 @@ export default class Webtorrent extends Intersection() {
       :host > details .pair > #torrent-downloaded:empty + span {
         display: none;
       }
-      :host([deleted]) > details > #content {
+      :host(:where([deleted], [request-key])) > details > #content {
         display: none;
       }
       :host > details > #content > #controls {
@@ -554,7 +580,7 @@ export default class Webtorrent extends Intersection() {
         display: none;
       }
       @media only screen and (max-width: _max-width_) {
-        :host([has-key]) > details > summary #header {
+        :host([has-key]:not([request-key]):not([deleted])) > details > summary #header {
           min-height: 3em;
         }
         :host > details > #content > #progress-info {
@@ -589,6 +615,8 @@ export default class Webtorrent extends Intersection() {
           <div id=header>
             <slot name=key></slot>
             <a id=error-link><slot name=error></slot></a>
+            <a id=deleted-link><slot name=deleted></slot></a>
+            <a id=request-key-link><slot name=request-key></slot></a>
             <div id=file-name content="file info" content-open="file info"></div>
           </div>
         </summary>
@@ -698,7 +726,8 @@ export default class Webtorrent extends Intersection() {
         this.removeAttribute('has-torrent')
         this.setAttribute('deleted', '')
         this.removeAttribute('updating')
-        this.addEventListener('click', event => this.renderTorrent(true, false, false, true), {once: true})
+        this.removeEventListener('click', this.deletedClickEventListener)
+        this.addEventListener('click', this.deletedClickEventListener, {once: true})
         this.updateHeight()
         return
       } else {
@@ -707,6 +736,7 @@ export default class Webtorrent extends Intersection() {
         this.removeAttribute('deleted')
         this.removeAttribute('deleting')
       }
+      if (this.hasAttribute('request-key')) return
       torrent.on('error', this.torrentErrorEventListener)
       const doneFunc = () => this.details.removeAttribute('open')
       if (torrent.done) doneFunc()
@@ -742,7 +772,7 @@ export default class Webtorrent extends Intersection() {
               this.dispatchEvent(new CustomEvent(`${this.namespace}view-is-stalled`, {
                 detail: {
                   torrent,
-                  torrentId: this.torrentId
+                  uid: this.getAttribute('uid')
                 },
                 bubbles: true,
                 cancelable: true,
@@ -927,7 +957,6 @@ export default class Webtorrent extends Intersection() {
         })
       }
     }
-    // TODO: fallback view if no key
     file.on('stream', streamOrDoneFunc)
     file.on('done', streamOrDoneFunc)
     return await this._renderFileTo(file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, keyContainer, tagName, append)
@@ -1001,7 +1030,6 @@ export default class Webtorrent extends Intersection() {
           headers: { 'Content-Type': file.type || 'application/octet-stream' }
         }).blob()
       } else {
-        // TODO: fallback view if no key
         return await file.blob()
       }
     } catch (error) {
@@ -1214,6 +1242,57 @@ export default class Webtorrent extends Intersection() {
     return Array.from(this.querySelectorAll('video')).concat(Array.from(this.root.querySelectorAll('video')))
   }
 
+  set keyContainer (value) {
+    if (this._keyContainer) {
+      this.globalEventTarget.removeEventListener('yjs-new-key', this.keysEventListener)
+      this.globalEventTarget.removeEventListener('yjs-key-deleted', this.keysEventListener)
+      this.globalEventTarget.removeEventListener('yjs-received-key', this.keysEventListener)
+    }
+    this._keyContainer = value
+    this._keyContainer.then(keyContainer => {
+      if (keyContainer) {
+        let assignedElement
+        if (assignedElement = this.keyIcon.assignedElements()?.[0]) {
+          // reset the key element with all the attributes already set plus key epoch and public-name
+          const replacement = document.createElement(assignedElement.tagName)
+          Array.from(assignedElement.attributes).forEach(attribute => replacement.setAttribute(attribute.name, attribute.value))
+          replacement.setAttribute('epoch', keyContainer.key.epoch)
+          replacement.setAttribute('public-name', keyContainer.public.name)
+          replacement.setAttribute('title', 'File successfully decrypted!')
+          assignedElement.replaceWith(replacement)
+        }
+        this.removeAttribute('request-key')
+        this.globalEventTarget.addEventListener('yjs-key-deleted', this.keysEventListener)
+      } else if (this.keyEpoch) {
+        this.setAttribute('request-key', '')
+        this.globalEventTarget.addEventListener('yjs-new-key', this.keysEventListener)
+        this.globalEventTarget.addEventListener('yjs-received-key', this.keysEventListener)
+        if (!this.requestKeyInnerHTML && this.root.querySelector('[name=request-key]')?.assignedElements()?.[0]?.innerHTML) this.requestKeyInnerHTML = this.root.querySelector('[name=request-key]').assignedElements()[0].innerHTML
+        if (this.requestKeyInnerHTML) this.root.querySelector('[name=request-key]').assignedElements()[0].innerHTML = this.requestKeyInnerHTML.replace('><', /*html*/`
+          >
+            <template>${JSON.stringify({
+              encrypted: {
+                public: {
+                  name: 'unknown key'
+                },
+                key: {
+                  epoch: this.keyEpoch
+                },
+                text: ''
+              },
+              uid: this.getAttribute('uid'),
+              timestamp: this.getAttribute('timestamp')
+            })}</template>
+          <
+        `)
+      }
+    })
+  }
+
+  get keyContainer () {
+    return this._keyContainer
+  }
+
   get customStyleHeight () {
     return (
       this._customStyleHeight ||
@@ -1223,5 +1302,10 @@ export default class Webtorrent extends Intersection() {
           return style
         })())
     )
+  }
+
+  get globalEventTarget () {
+    // @ts-ignore
+    return this._globalEventTarget || (this._globalEventTarget = self.Environment?.activeRoute || document.body)
   }
 }

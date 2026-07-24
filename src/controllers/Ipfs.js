@@ -219,18 +219,18 @@ export default class Ipfs extends HTMLElement {
   }
 
   connectedCallback () {
-    document.body.addEventListener(`${this.namespace}add-web-seed`, this.torrentAddWebSeed)
-    document.body.addEventListener(`${this.namespace}cat`, this.ipfsCatEventListener)
-    document.body.addEventListener(`${this.namespace}seed`, this.ipfsSeedEventListener)
-    document.body.addEventListener(`${this.namespace}get-torrent-file`, this.ipfsGetTorrentFileEventListener)
+    this.globalEventTarget.addEventListener(`${this.namespace}add-web-seed`, this.torrentAddWebSeed)
+    this.globalEventTarget.addEventListener(`${this.namespace}cat`, this.ipfsCatEventListener)
+    this.globalEventTarget.addEventListener(`${this.namespace}seed`, this.ipfsSeedEventListener)
+    this.globalEventTarget.addEventListener(`${this.namespace}get-torrent-file`, this.ipfsGetTorrentFileEventListener)
     self.addEventListener('online', this.onlineEventListener)
   }
 
   disconnectedCallback () {
-    document.body.removeEventListener(`${this.namespace}add-web-seed`, this.torrentAddWebSeed)
-    document.body.removeEventListener(`${this.namespace}cat`, this.ipfsCatEventListener)
-    document.body.removeEventListener(`${this.namespace}seed`, this.ipfsSeedEventListener)
-    document.body.removeEventListener(`${this.namespace}get-torrent-file`, this.ipfsGetTorrentFileEventListener)
+    this.globalEventTarget.removeEventListener(`${this.namespace}add-web-seed`, this.torrentAddWebSeed)
+    this.globalEventTarget.removeEventListener(`${this.namespace}cat`, this.ipfsCatEventListener)
+    this.globalEventTarget.removeEventListener(`${this.namespace}seed`, this.ipfsSeedEventListener)
+    this.globalEventTarget.removeEventListener(`${this.namespace}get-torrent-file`, this.ipfsGetTorrentFileEventListener)
     self.removeEventListener('online', this.onlineEventListener)
   }
 
@@ -843,5 +843,10 @@ export default class Ipfs extends HTMLElement {
     if (navigator.onLine) resolveFunc(func())
     self.addEventListener('online', () => resolveFunc(func()), {once: true})
     return promise
+  }
+
+  get globalEventTarget () {
+    // @ts-ignore
+    return this._globalEventTarget || (this._globalEventTarget = self.Environment?.activeRoute || document.body)
   }
 }

@@ -605,7 +605,7 @@ export default class Webtorrent extends WebWorker() {
 
   connectedCallback () {
     this.init().then(async () => {
-      document.body.setAttribute(`${this.namespace}ready`, 'true')
+      this.globalEventTarget.setAttribute(`${this.namespace}ready`, 'true')
       this.dispatchEvent(new CustomEvent(`${this.namespace}ready`, {
         detail: {
           ready: true
@@ -629,15 +629,15 @@ export default class Webtorrent extends WebWorker() {
         })
       }
     })
-    document.body.addEventListener(`${this.namespace}add`, this.webtorrentAddEventListener)
-    document.body.addEventListener(`${this.namespace}seed`, this.webtorrentSeedEventListener)
-    document.body.addEventListener(`${this.namespace}reset`, this.webtorrentResetEventListener)
-    document.body.addEventListener(`${this.namespace}pause`, this.webtorrentPauseEventListener)
-    document.body.addEventListener(`${this.namespace}pin`, this.webtorrentPinEventListener)
-    document.body.addEventListener(`${this.namespace}view-is-stalled`, this.webtorrentViewIsStalledEventListener)
-    document.body.addEventListener(`${this.namespace}view-file-error`, this.webtorrentViewFileErrorEventListener)
-    document.body.addEventListener(`${this.namespace}view-torrent-error`, this.webtorrentViewTorrentErrorEventListener)
-    document.body.addEventListener(`${this.namespace}view-reset-link-click`, this.webtorrentViewResetLinkClickEventListener)
+    this.globalEventTarget.addEventListener(`${this.namespace}add`, this.webtorrentAddEventListener)
+    this.globalEventTarget.addEventListener(`${this.namespace}seed`, this.webtorrentSeedEventListener)
+    this.globalEventTarget.addEventListener(`${this.namespace}reset`, this.webtorrentResetEventListener)
+    this.globalEventTarget.addEventListener(`${this.namespace}pause`, this.webtorrentPauseEventListener)
+    this.globalEventTarget.addEventListener(`${this.namespace}pin`, this.webtorrentPinEventListener)
+    this.globalEventTarget.addEventListener(`${this.namespace}view-is-stalled`, this.webtorrentViewIsStalledEventListener)
+    this.globalEventTarget.addEventListener(`${this.namespace}view-file-error`, this.webtorrentViewFileErrorEventListener)
+    this.globalEventTarget.addEventListener(`${this.namespace}view-torrent-error`, this.webtorrentViewTorrentErrorEventListener)
+    this.globalEventTarget.addEventListener(`${this.namespace}view-reset-link-click`, this.webtorrentViewResetLinkClickEventListener)
     this.addEventListener('chat-deleted', this.chatDeletedEventListener)
     this.addEventListener('webtorrent-deleted', this.chatDeletedEventListener)
     this.addEventListener('yjs-deleted-room', this.yjsDeletedRoomEventListener)
@@ -646,7 +646,7 @@ export default class Webtorrent extends WebWorker() {
 
   disconnectedCallback () {
     this.destroy().then(() => {
-      document.body.removeAttribute(`${this.namespace}ready`)
+      this.globalEventTarget.removeAttribute(`${this.namespace}ready`)
       this.dispatchEvent(new CustomEvent(`${this.namespace}ready`, {
         detail: {
           ready: false
@@ -656,15 +656,15 @@ export default class Webtorrent extends WebWorker() {
         composed: true
       }))
     })
-    document.body.removeEventListener(`${this.namespace}add`, this.webtorrentAddEventListener)
-    document.body.removeEventListener(`${this.namespace}seed`, this.webtorrentSeedEventListener)
-    document.body.removeEventListener(`${this.namespace}reset`, this.webtorrentResetEventListener)
-    document.body.removeEventListener(`${this.namespace}pause`, this.webtorrentPauseEventListener)
-    document.body.removeEventListener(`${this.namespace}pin`, this.webtorrentPinEventListener)
-    document.body.removeEventListener(`${this.namespace}view-is-stalled`, this.webtorrentViewIsStalledEventListener)
-    document.body.removeEventListener(`${this.namespace}view-file-error`, this.webtorrentViewFileErrorEventListener)
-    document.body.removeEventListener(`${this.namespace}view-torrent-error`, this.webtorrentViewTorrentErrorEventListener)
-    document.body.removeEventListener(`${this.namespace}view-reset-link-click`, this.webtorrentViewResetLinkClickEventListener)
+    this.globalEventTarget.removeEventListener(`${this.namespace}add`, this.webtorrentAddEventListener)
+    this.globalEventTarget.removeEventListener(`${this.namespace}seed`, this.webtorrentSeedEventListener)
+    this.globalEventTarget.removeEventListener(`${this.namespace}reset`, this.webtorrentResetEventListener)
+    this.globalEventTarget.removeEventListener(`${this.namespace}pause`, this.webtorrentPauseEventListener)
+    this.globalEventTarget.removeEventListener(`${this.namespace}pin`, this.webtorrentPinEventListener)
+    this.globalEventTarget.removeEventListener(`${this.namespace}view-is-stalled`, this.webtorrentViewIsStalledEventListener)
+    this.globalEventTarget.removeEventListener(`${this.namespace}view-file-error`, this.webtorrentViewFileErrorEventListener)
+    this.globalEventTarget.removeEventListener(`${this.namespace}view-torrent-error`, this.webtorrentViewTorrentErrorEventListener)
+    this.globalEventTarget.removeEventListener(`${this.namespace}view-reset-link-click`, this.webtorrentViewResetLinkClickEventListener)
     this.removeEventListener('chat-deleted', this.chatDeletedEventListener)
     this.removeEventListener('webtorrent-deleted', this.chatDeletedEventListener)
     this.removeEventListener('yjs-deleted-room', this.yjsDeletedRoomEventListener)
@@ -960,5 +960,10 @@ export default class Webtorrent extends WebWorker() {
       torrentDestroyedResolve()
     })
     return torrentDestroyedPromise
+  }
+
+  get globalEventTarget () {
+    // @ts-ignore
+    return this._globalEventTarget || (this._globalEventTarget = self.Environment?.activeRoute || document.body)
   }
 }
