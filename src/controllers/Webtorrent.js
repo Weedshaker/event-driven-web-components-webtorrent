@@ -215,11 +215,11 @@ export default class Webtorrent extends WebWorker() {
       if (await Webtorrent.#torrentMap.has(infoHash)) {
         const existingResult = await Webtorrent.#torrentMap.get(infoHash)
         if (existingResult) {
-          if (event.detail.destroyOpts) {
-            await Webtorrent.destroyTorrent(existingResult.torrent, infoHash, event.detail.destroyOpts) // If opts.destroyStore is specified, it will override opts.destroyStoreOnDestroy passed when the torrent was added.
-          } else {
+          if (event.detail.destroyOpts === undefined) {
             this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(existingResult.torrent), location.href, event.detail.uid, event.detail.room, event.detail.timestamp, cid)
             return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {...existingResult, existingResult: true}, existingResult.torrent)
+          } else {
+            await Webtorrent.destroyTorrent(existingResult.torrent, infoHash, event.detail.destroyOpts) // If opts.destroyStore is specified, it will override opts.destroyStoreOnDestroy passed when the torrent was added.
           }
         }
       }
