@@ -256,7 +256,10 @@ export default class Webtorrent extends Intersection() {
         : event.detail.status
       switch (status) {
         case 'progress':
-          if (event.detail.gateway.origin === 'ipfs') break
+          if (event.detail.gateway.origin === 'ipfs') {
+            this.ipfsStatusEl.textContent = 'Upload pending...'
+            break
+          }
           ipfsProgressMap.set(event.detail.gateway.origin, bytesUploaded)
           this.ipfsStatusEl.textContent = `Uploading to ${event.detail.gateway.origin}`
           this.ipfsProgressEl.textContent = `${(bytesUploaded / event.detail.torrent.length *100).toFixed(1)}%`
@@ -302,12 +305,12 @@ export default class Webtorrent extends Intersection() {
     this.resetLink.addEventListener('click', this.resetClickLinkEventListener)
     this.trashLink.addEventListener('click', this.trashClickLinkEventListener)
     self.addEventListener('resize', this.resizeEventListener)
-    this.globalEventTarget.addEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
+    document.body.addEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
     if (this.infoHash) {
-      this.globalEventTarget.addEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
-      this.globalEventTarget.addEventListener(`ipfs-progress-${this.infoHash}`, this.ipfsStatusEventListener)
-      this.globalEventTarget.addEventListener(`ipfs-done-${this.infoHash}`, this.ipfsStatusEventListener)
-      this.globalEventTarget.addEventListener(`ipfs-error-${this.infoHash}`, this.ipfsStatusEventListener)
+      document.body.addEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
+      document.body.addEventListener(`ipfs-progress-${this.infoHash}`, this.ipfsStatusEventListener)
+      document.body.addEventListener(`ipfs-done-${this.infoHash}`, this.ipfsStatusEventListener)
+      document.body.addEventListener(`ipfs-error-${this.infoHash}`, this.ipfsStatusEventListener)
     }
     if (this.isConnected) this.connectedCallbackOnce()
   }
@@ -339,12 +342,12 @@ export default class Webtorrent extends Intersection() {
     this.resetLink.removeEventListener('click', this.resetClickLinkEventListener)
     this.trashLink.removeEventListener('click', this.trashClickLinkEventListener)
     self.removeEventListener('resize', this.resizeEventListener)
-    this.globalEventTarget.removeEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
+    document.body.removeEventListener(`${this.namespace}did-reset`, this.webtorrentDidResetEventListener)
     if (this.infoHash) {
-      this.globalEventTarget.removeEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
-      this.globalEventTarget.removeEventListener(`ipfs-progress-${this.infoHash}`, this.ipfsStatusEventListener)
-      this.globalEventTarget.removeEventListener(`ipfs-done-${this.infoHash}`, this.ipfsStatusEventListener)
-      this.globalEventTarget.removeEventListener(`ipfs-error-${this.infoHash}`, this.ipfsStatusEventListener)
+      document.body.removeEventListener(`${this.namespace}${this.infoHash}`, this.webtorrentInfoHashEventListener)
+      document.body.removeEventListener(`ipfs-progress-${this.infoHash}`, this.ipfsStatusEventListener)
+      document.body.removeEventListener(`ipfs-done-${this.infoHash}`, this.ipfsStatusEventListener)
+      document.body.removeEventListener(`ipfs-error-${this.infoHash}`, this.ipfsStatusEventListener)
     }
   }
 
