@@ -239,10 +239,11 @@ export default class Webtorrent extends WebWorker() {
       Webtorrent.#torrentMap.set(infoHash, new Promise(resolve => (torrentMapResolve = resolve)))
       let torrentId = event.detail.torrentId
       let torrent = null
-      if (torrentContainer?.torrentFile) {
-        torrentId = new Uint8Array(torrentContainer.torrentFile)
-      } else if (event.detail.torrentFile) {
+      if (event.detail.torrentFile) {
         torrentId = event.detail.torrentFile
+      // event.detail.destroyOpts === undefined means to not resetTorrent
+      } else if (torrentContainer?.torrentFile && event.detail.destroyOpts === undefined) {
+        torrentId = new Uint8Array(torrentContainer.torrentFile)
       } else if (cid) {
         // try to get the torrent through ipfs
         const getTorrentFilePromise = new Promise(resolve => this.dispatchEvent(new CustomEvent('ipfs-get-torrent-file', {
@@ -262,6 +263,7 @@ export default class Webtorrent extends WebWorker() {
         if (torrentFile) {
           torrentId = torrentFile
         } else {
+          if (torrentContainer?.torrentFile) torrentId = new Uint8Array(torrentContainer.torrentFile)
           // if ipfs could not cat/fetch the file within the timeout, we would digest it later and reset the torrent with destroyOpts=true
           getTorrentFilePromise.then(result => {
             if (result?.torrentFile && !torrent?.torrentFile) {
