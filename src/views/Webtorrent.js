@@ -247,8 +247,8 @@ export default class Webtorrent extends Intersection() {
     const ipfsProgressMap = new Map()
     this.ipfsStatusEventListener = event => {
       if (typeof this.activityFunc === 'function') this.activityFunc()
-      if (ipfsDone) return
-      const bytesUploaded = (ipfsProgressMap.has(event.detail.gateway.origin) && event.detail.bytesUploaded !== undefined
+      if (ipfsDone && event.detail.status !== 'error') return
+      const bytesUploaded = (event.detail.gateway && ipfsProgressMap.has(event.detail.gateway.origin) && event.detail.bytesUploaded !== undefined
             ? ipfsProgressMap.get(event.detail.gateway.origin) + event.detail.bytesUploaded
             : event.detail.bytesUploaded) || 0
       const status = bytesUploaded >= event.detail.torrent.length
@@ -274,7 +274,7 @@ export default class Webtorrent extends Intersection() {
           this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
           break
         case 'error':
-          this.ipfsStatusEl.textContent = `Failed to upload to ${event.detail.gateway.origin}`
+          this.ipfsStatusEl.textContent = `Failed to upload to ${event.detail.gateway?.origin || 'ipfs'}`
           this.ipfsProgressEl.textContent = '0%'
           this.ipfsUploadedEl.textContent = '0'
           this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)

@@ -193,11 +193,12 @@ export default class Ipfs extends HTMLElement {
     // client.addAll
     this.ipfsSeedEventListener = event => {
       const addAllFunc = async (inputFiles, torrent) => {
-        let cidOne, cidTwo
+        let cidOne
         // returns the filesCidMetadata cid
         if (event.detail?.resolveCid) this.respond(event.detail.resolveCid, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {cid: (cidOne = await this.createFileListCid(inputFiles, torrent))})
+        const {error, cid: cidTwo} = await this.addAll(inputFiles, torrent)
         // adds and returns the filesCidMetadata cid
-        this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {cid: (cidTwo = await this.addAll(inputFiles, torrent))})
+        this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {cid: cidTwo, error})
         if (cidOne && cidTwo && cidOne !== cidTwo) console.warn('Error while creating cids', {cidOne, cidTwo})
       }
       // preferred to consume the files directly from File Input but must be sorted analog controller/Webtorrent.js client.seed L: 282, sometimes the torrent.files made trouble to stream, which resulted in some Readable Stream error
@@ -272,7 +273,7 @@ export default class Ipfs extends HTMLElement {
    * 
    * @param {FileList} inputFiles
    * @param {any} torrent
-   * @returns {Promise<string>} // returns the filesCidMetadata cid
+   * @returns {Promise<{cid: string, error?: Error}>} // returns the filesCidMetadata cid
    */
   async addAll (inputFiles, torrent) {
     const filesCidMetadata = []
@@ -280,7 +281,22 @@ export default class Ipfs extends HTMLElement {
     await Promise.all(Ipfs.createFileListArray(inputFiles, torrent).map(async (file, i) => {
       filesCidMetadata.push(Ipfs.createFileMetadata(inputFiles, torrent, await this.add(file, torrent).result, i))
     }))
-    return (await this.add(Ipfs.createFileListJsonFile(filesCidMetadata)).result).cid.toString() 
+    let fileListJsonFile
+    let {cid, error} = await this.add(fileListJsonFile = Ipfs.createFileListJsonFile(filesCidMetadata)).result
+    let foundErrorData
+    if (!error && (foundErrorData = filesCidMetadata.find(data => data.error))) error = foundErrorData.error
+    if (error) this.dispatchEvent(new CustomEvent(`${this.namespace}error-${torrent.infoHash}`, {
+      detail: {
+        status: 'error',
+        file: fileListJsonFile,
+        torrent,
+        bytesUploaded: 0
+      },
+      bubbles: true,
+      cancelable: true,
+      composed: true
+    }))
+    return {cid: cid.toString(), error}
   }
 
   /**
@@ -631,10 +647,9 @@ export default class Ipfs extends HTMLElement {
    * @memberof Ipfs
    * @param {{path: string, content: ReadableStream}|File} file
    * @param {any} [torrent=null]
-   * @returns {{result: Promise<{cid: string}>, getAbortController: () => AbortController}}
+   * @returns {{result: Promise<{cid: string, error?: Error}>, getAbortController: () => AbortController}}
    */
   add (file, torrent = null) {
-    // TODO: keep state of adding in progress and avoid double adding
     let abortController = new AbortController()
     const func = async () => {
       const createFileCid = async file => {
@@ -736,7 +751,7 @@ export default class Ipfs extends HTMLElement {
             }))
           }
           if (error.name === 'AbortError') {
-            return createFileCid(file)
+            return {...createFileCid(file), error}
           } else {
             this.setGatewayError(gatewayResult.gateway, 'hasAddError', true)
             if (!gatewayResult.ignoreError) {
@@ -745,13 +760,13 @@ export default class Ipfs extends HTMLElement {
               return addResult.result
             } else {
               console.warn('Failed to add...', error, file)
-              return createFileCid(file)
+              return {...createFileCid(file), error}
             }
           }
         }
       } else {
         console.warn('No more viable gateways...', this.gateways)
-        return createFileCid(file)
+        return {...createFileCid(file), error: new Error('No more viable gateways...')}
       }
     }
     return {result: this.resolveWhenOnline(func), getAbortController: () => abortController}
