@@ -51,7 +51,7 @@ export default class Ipfs extends HTMLElement {
           supports: ['add', 'cat']
         },
         {
-          origin: 'https://dcn-web.hostlocal.app',
+          origin: 'https://dcn-web.peerweb.site',
           supports: ['fetch']
         },
         {
