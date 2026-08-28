@@ -254,6 +254,7 @@ export default class Webtorrent extends Intersection() {
       const status = bytesUploaded >= event.detail.torrent.length
         ? 'done'
         : event.detail.status
+      clearTimeout(this.ipfsStatusTimeout)
       switch (status) {
         case 'progress':
           if (event.detail.gateway.origin === 'ipfs') {
@@ -265,6 +266,7 @@ export default class Webtorrent extends Intersection() {
           this.ipfsProgressEl.textContent = `${(bytesUploaded / event.detail.torrent.length *100).toFixed(1)}%`
           this.ipfsUploadedEl.textContent = Webtorrent.formatBytes(bytesUploaded)
           this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
+          this.ipfsStatusTimeout = setTimeout(() => this.details.setAttribute('open', ''), 1000)
           break
         case 'done':
           ipfsDone = true
@@ -272,12 +274,14 @@ export default class Webtorrent extends Intersection() {
           this.ipfsProgressEl.textContent = '100%'
           this.ipfsUploadedEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
           this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
+          this.ipfsStatusTimeout = setTimeout(() => this.details.removeAttribute('open'), 1000)
           break
         case 'error':
           this.ipfsStatusEl.textContent = `Failed to upload to ${event.detail.gateway?.origin || 'ipfs'}`
           this.ipfsProgressEl.textContent = '0%'
           this.ipfsUploadedEl.textContent = '0'
           this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
+          this.ipfsStatusTimeout = setTimeout(() => this.details.setAttribute('open', ''), 1000)
           break
       }
     }

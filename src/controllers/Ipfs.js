@@ -281,22 +281,37 @@ export default class Ipfs extends HTMLElement {
     await Promise.all(Ipfs.createFileListArray(inputFiles, torrent).map(async (file, i) => {
       filesCidMetadata.push(Ipfs.createFileMetadata(inputFiles, torrent, await this.add(file, torrent).result, i))
     }))
-    let fileListJsonFile
-    let {cid, error} = await this.add(fileListJsonFile = Ipfs.createFileListJsonFile(filesCidMetadata)).result
     let foundErrorData
-    if (!error && (foundErrorData = filesCidMetadata.find(data => data.error))) error = foundErrorData.error
-    if (error) this.dispatchEvent(new CustomEvent(`${this.namespace}error-${torrent.infoHash}`, {
-      detail: {
-        status: 'error',
-        file: fileListJsonFile,
-        torrent,
-        bytesUploaded: 0
-      },
-      bubbles: true,
-      cancelable: true,
-      composed: true
-    }))
-    return {cid: cid.toString(), error}
+    if ((foundErrorData = filesCidMetadata.find(data => data.error))) {
+      this.dispatchEvent(new CustomEvent(`${this.namespace}error-${torrent.infoHash}`, {
+        detail: {
+          status: 'error',
+          torrent,
+          bytesUploaded: 0
+        },
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      }))
+      return {cid: 'error', error: foundErrorData.error}
+    }
+    let fileListJsonFile
+    const {cid, error} = await this.add(fileListJsonFile = Ipfs.createFileListJsonFile(filesCidMetadata)).result
+    if (error) {
+      this.dispatchEvent(new CustomEvent(`${this.namespace}error-${torrent.infoHash}`, {
+        detail: {
+          status: 'error',
+          file: fileListJsonFile,
+          torrent,
+          bytesUploaded: 0
+        },
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      }))
+      return {cid: 'error', error}
+    }
+    return {cid: cid.toString()}
   }
 
   /**
@@ -386,23 +401,34 @@ export default class Ipfs extends HTMLElement {
    * 
    * @param {FileList} inputFiles
    * @param {any} torrent
-   * @returns {{cid: string, name: string | 'torrent', type: string | 'application/x-bittorrent', size?: number, offset?: number, length?: number}}
+   * @param {{cid: string, error?: Error}} result
+   * @param {number} counter
+   * @returns {{cid: string, name: string | 'torrent', type: string | 'application/x-bittorrent', size?: number, offset?: number, length?: number, error?: Error}}
    */
   static createFileMetadata (inputFiles, torrent, result, counter) {
-    return inputFiles[counter] ?
-      {
-        cid: result.cid.toString(),
-        //lastModified: inputFiles[counter].lastModified, // avoid this, otherwise the cid is always going to change
-        name: inputFiles[counter].name,
-        type: inputFiles[counter].type,
-        offset: torrent.files[counter]?.offset,
-        length: torrent.files[counter]?.length
-      }
-      : {
-        cid: result.cid.toString(),
-        name: 'torrent',
-        type: 'application/x-bittorrent'
-      }
+    return result.error
+      ? {
+          cid: 'error',
+          error: result.error,
+          name: inputFiles[counter].name,
+          type: inputFiles[counter].type,
+          offset: torrent.files[counter]?.offset,
+          length: torrent.files[counter]?.length
+        }
+      : inputFiles[counter]
+        ? {
+          cid: result.cid.toString(),
+          //lastModified: inputFiles[counter].lastModified, // avoid this, otherwise the cid is always going to change
+          name: inputFiles[counter].name,
+          type: inputFiles[counter].type,
+          offset: torrent.files[counter]?.offset,
+          length: torrent.files[counter]?.length
+        }
+        : {
+          cid: result.cid.toString(),
+          name: 'torrent',
+          type: 'application/x-bittorrent'
+        }
   }
 
   static createFileListJsonFile (data) {
