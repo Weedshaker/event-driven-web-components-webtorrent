@@ -293,7 +293,7 @@ export default class Ipfs extends HTMLElement {
         cancelable: true,
         composed: true
       }))
-      return {cid: 'error', error: foundErrorData.error}
+      if (filesCidMetadata.some(data => !data.cid || data.cid === 'error')) return {cid: 'error', error: foundErrorData.error}
     }
     let fileListJsonFile
     const {cid, error} = await this.add(fileListJsonFile = Ipfs.createFileListJsonFile(filesCidMetadata)).result
@@ -309,9 +309,9 @@ export default class Ipfs extends HTMLElement {
         cancelable: true,
         composed: true
       }))
-      return {cid: 'error', error}
+      if (!cid || cid === 'error') return {cid: 'error', error}
     }
-    return {cid: cid.toString()}
+    return {cid: cid.toString(), error}
   }
 
   /**
@@ -403,7 +403,7 @@ export default class Ipfs extends HTMLElement {
    * @param {any} torrent
    * @param {{cid: string, error?: Error}} result
    * @param {number} counter
-   * @returns {{cid: string, name: string | 'torrent', type: string | 'application/x-bittorrent', size?: number, offset?: number, length?: number, error?: Error}}
+   * @returns {{cid: string | 'error', name: string | 'torrent', type: string | 'application/x-bittorrent', size?: number, offset?: number, length?: number, error?: Error}}
    */
   static createFileMetadata (inputFiles, torrent, result, counter) {
     return result.error
