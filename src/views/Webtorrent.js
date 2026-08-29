@@ -255,32 +255,48 @@ export default class Webtorrent extends Intersection() {
         ? 'done'
         : event.detail.status
       clearTimeout(this.ipfsStatusTimeout)
+      const fileName = (event.detail.file?.name || event.detail.file?.path || event.detail.torrent?.name)
+      // TODO: check why it shows upload ipfs done even though it is not finished!!!
+      const fileSelector = 'f_' + event.detail.torrent?.infoHash
+      if (fileSelector && !this.getSpecificIpfsProgressInfoEl(fileSelector)) {
+        const newIpfsProgressInfoEl = this.ipfsProgressInfoEl.cloneNode(true)
+        newIpfsProgressInfoEl.setAttribute('file-name', fileSelector)
+        newIpfsProgressInfoEl.querySelector('.pair').remove()
+        this.ipfsProgressInfoEl.after(newIpfsProgressInfoEl)
+      }
       switch (status) {
         case 'progress':
           if (event.detail.gateway.origin === 'ipfs') {
-            this.ipfsStatusEl.textContent = 'Upload pending...'
+            this.getIpfsStatusEl().textContent = `Upload pending...`
+            this.getIpfsStatusEl(fileSelector).textContent = `Upload${fileName ? ` ${fileName}` : ''} pending...`
             break
           }
           ipfsProgressMap.set(event.detail.gateway.origin, bytesUploaded)
-          this.ipfsStatusEl.textContent = `Uploading to ${event.detail.gateway.origin}`
-          this.ipfsProgressEl.textContent = `${(bytesUploaded / event.detail.torrent.length *100).toFixed(1)}%`
-          this.ipfsUploadedEl.textContent = Webtorrent.formatBytes(bytesUploaded)
-          this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
+          this.getIpfsStatusEl().textContent = `Uploading to ${event.detail.gateway.origin}`
+          this.getIpfsStatusEl(fileSelector).textContent = `Uploading${fileName ? ` ${fileName}` : ''} to ${event.detail.gateway.origin}`
+          this.getIpfsProgressEl(fileSelector).textContent = `${(bytesUploaded / event.detail.torrent.length *100).toFixed(1)}%`
+          this.getIpfsUploadedEl().textContent = Webtorrent.formatBytes(bytesUploaded)
+          this.getIpfsLengthEl().textContent = Webtorrent.formatBytes(event.detail.torrent.length)
           this.ipfsStatusTimeout = setTimeout(() => this.details.setAttribute('open', ''), 1000)
           break
         case 'done':
-          ipfsDone = true
-          this.ipfsStatusEl.textContent = `Uploaded to ${event.detail.gateway.origin}`
-          this.ipfsProgressEl.textContent = '100%'
-          this.ipfsUploadedEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
-          this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
+          this.getIpfsStatusEl().textContent = `Uploaded to ${event.detail.gateway.origin}`
+          this.getIpfsStatusEl(fileSelector).textContent = `Uploaded${fileName ? ` ${fileName}` : ''} to ${event.detail.gateway.origin}`
+          this.getIpfsProgressEl(fileSelector).textContent = '100%'
+          this.getIpfsUploadedEl().textContent = Webtorrent.formatBytes(event.detail.torrent.length)
+          this.getIpfsLengthEl().textContent = Webtorrent.formatBytes(event.detail.torrent.length)
+          if (this.getIpfsUploadedEl().textContent === this.getIpfsLengthEl().textContent) {
+            ipfsDone = true
+            this.getAllSpecificIpfsProgressInfoEl().forEach(el => el.remove())
+          }
           this.ipfsStatusTimeout = setTimeout(() => this.details.removeAttribute('open'), 1000)
           break
         case 'error':
-          this.ipfsStatusEl.textContent = `Failed to upload to ${event.detail.gateway?.origin || 'ipfs'}`
-          this.ipfsProgressEl.textContent = '0%'
-          this.ipfsUploadedEl.textContent = '0'
-          this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
+          this.getIpfsStatusEl().textContent = `Failed to upload to ${event.detail.gateway?.origin || 'ipfs'}`
+          this.getIpfsStatusEl(fileSelector).textContent = `Failed to upload${fileName ? ` ${fileName}` : ''} to ${event.detail.gateway?.origin || 'ipfs'}`
+          this.getIpfsProgressEl(fileSelector).textContent = '0%'
+          this.getIpfsUploadedEl().textContent = '0'
+          this.getIpfsLengthEl().textContent = Webtorrent.formatBytes(event.detail.torrent.length)
           this.ipfsStatusTimeout = setTimeout(() => this.details.setAttribute('open', ''), 1000)
           break
       }
@@ -524,13 +540,13 @@ export default class Webtorrent extends Intersection() {
       :host > details[open] > #content {
         border-bottom: 1px solid var(--color-secondary);
       }
-      :host > details > #content > #controls, :host > details > #content > #progress, :host > details > #content > #progress-info {
+      :host > details > #content > #controls, :host > details > #content > #progress, :host > details > #content > .progress-info {
         align-items: center;
         display: flex;
         gap: 0.5em;
         justify-content: end;
       }
-      :host > details > #content > #progress-info {
+      :host > details > #content > .progress-info {
         flex-wrap: wrap;
         justify-content: space-between;
         gap: 0 1em;
@@ -580,17 +596,17 @@ export default class Webtorrent extends Intersection() {
       :host > details > #content > #progress > #progress-bar > progress {
         min-width: 100%;
       }
-      :host > details > #content > #progress-info > * {
+      :host > details > #content > .progress-info > * {
         flex-shrink: 0;
       }
-      :host > details > #content > #progress-info > *:empty {
+      :host > details > #content > .progress-info > *:empty {
         display: none;
       }
       @media only screen and (max-width: _max-width_) {
         :host([has-key]:not([request-key]):not([deleted])) > details > summary #header {
           min-height: 3em;
         }
-        :host > details > #content > #progress-info {
+        :host > details > #content > .progress-info {
           justify-content: center;
         }
       }
@@ -639,7 +655,7 @@ export default class Webtorrent extends Intersection() {
             <div id=progress-bar></div>
           </div>
           <div class="info-title">webtorrent (ipfs cat):</div>
-          <div id=progress-info>
+          <div class=progress-info>
             <div id=torrent-status></div>
             <div id=torrent-progress></div>
             <div class=pair>
@@ -657,13 +673,13 @@ export default class Webtorrent extends Intersection() {
           </div>
           <hr>
           <div class="info-title">ipfs add:</div>
-          <div id=progress-info>
-            <div id=ipfs-status>No information...</div>
-            <div id=ipfs-progress></div>
+          <div class=progress-info ipfs>
+            <div class=ipfs-status>No information...</div>
+            <div class=ipfs-progress></div>
             <div class=pair>
-              <div id=ipfs-uploaded></div>
+              <div class=ipfs-uploaded></div>
               <span>&nbsp;/&nbsp;</span>
-              <div id=ipfs-length></div>
+              <div class=ipfs-length></div>
             </div>
           </div>
         </div>
@@ -1165,32 +1181,49 @@ export default class Webtorrent extends Intersection() {
     return this._torrentStatusEl || (this._torrentStatusEl = this.details.querySelector('#torrent-status'))
   }
 
-  get ipfsStatusEl () {
-    return this._ipfsStatusEl || (this._ipfsStatusEl = this.details.querySelector('#ipfs-status'))
+  get ipfsProgressInfoEl () {
+    return this._ipfsProgressInfoEl || (this._ipfsProgressInfoEl = this.details.querySelector('.progress-info[ipfs]:not([file-name])'))
+  }
+
+  getSpecificIpfsProgressInfoEl (fileName) {
+    return this.details.querySelector(`.progress-info[ipfs][file-name=${fileName}]`)
+  }
+
+  getAllSpecificIpfsProgressInfoEl (fileName) {
+    return Array.from(this.details.querySelectorAll(`.progress-info[ipfs][file-name]`))
+  }
+
+  getIpfsProgressInfoEl (fileName) {
+    if (!fileName) return this.ipfsProgressInfoEl
+    return this.getSpecificIpfsProgressInfoEl(fileName) || this.ipfsProgressInfoEl
+  }
+
+  getIpfsStatusEl (fileName) {
+    return this.getIpfsProgressInfoEl(fileName).querySelector('.ipfs-status')
   }
 
   get torrentProgressEl () {
     return this._torrentProgressEl || (this._torrentProgressEl = this.details.querySelector('#torrent-progress'))
   }
 
-  get ipfsProgressEl () {
-    return this._ipfsProgressEl || (this._ipfsProgressEl = this.details.querySelector('#ipfs-progress'))
+  getIpfsProgressEl (fileName) {
+    return this.getIpfsProgressInfoEl(fileName).querySelector('.ipfs-progress')
   }
 
   get torrentDownloadedEl () {
     return this._torrentDownloadedEl || (this._torrentDownloadedEl = this.details.querySelector('#torrent-downloaded'))
   }
 
-  get ipfsUploadedEl () {
-    return this._ipfsUploadedEl || (this._ipfsUploadedEl = this.details.querySelector('#ipfs-uploaded'))
+  getIpfsUploadedEl (fileName) {
+    return this.getIpfsProgressInfoEl(fileName).querySelector('.ipfs-uploaded')
   }
 
   get torrentLengthEl () {
     return this._torrentLengthEl || (this._torrentLengthEl = this.details.querySelector('#torrent-length'))
   }
 
-  get ipfsLengthEl () {
-    return this._ipfsLengthEl || (this._ipfsLengthEl = this.details.querySelector('#ipfs-length'))
+  getIpfsLengthEl (fileName) {
+    return this.getIpfsProgressInfoEl(fileName).querySelector('.ipfs-length')
   }
 
   get torrentPeersEl () {
