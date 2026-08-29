@@ -138,6 +138,9 @@ export default class Ipfs extends HTMLElement {
     this.cidVersion = 0
     this.rawLeaves = false
     this.clientRpcVersion = `/api/v${this.cidVersion}`
+    this.catProgressMap = new Map()
+    this.fetchProgressMap = new Map()
+    this.addProgressMap = new Map()
 
     // torrent.addWebSeed from filesCidMetadata
     // dispatched from controllers/Webtorrent.js when webtorrentAddEventListener => torrent.on 'infoHash'
@@ -587,12 +590,26 @@ export default class Ipfs extends HTMLElement {
   }
 
   /**
-   * cat resp. download through ipfs client
+   * Check if already catting else forward to _cat
    * 
    * @param {string} cid
    * @returns {{result: Promise<{chunks: any[]|null, gateway:GATEWAY|null, isAbortError?:boolean}>, getAbortController: () => AbortController}}
    */
   cat (cid) {
+    if (this.catProgressMap.has(cid)) return this.catProgressMap.get(cid)
+    const catResult = this._cat(cid)
+    this.catProgressMap.set(cid, catResult)
+    catResult.result.then(result => this.catProgressMap.delete(cid))
+    return catResult
+  }
+
+  /**
+   * cat resp. download through ipfs client
+   * 
+   * @param {string} cid
+   * @returns {{result: Promise<{chunks: any[]|null, gateway:GATEWAY|null, isAbortError?:boolean}>, getAbortController: () => AbortController}}
+   */
+  _cat (cid) {
     let abortController = new AbortController()
     const func = async () => {
       const gatewayResult = this.getGateway('cat')
@@ -611,7 +628,7 @@ export default class Ipfs extends HTMLElement {
           } else {
             this.setGatewayError(gatewayResult.gateway, 'hasError', true)
             if (!gatewayResult.ignoreError) {
-              const catResult = this.cat(cid)
+              const catResult = this._cat(cid)
               abortController = catResult.getAbortController()
               return catResult.result
             } else {
@@ -628,12 +645,26 @@ export default class Ipfs extends HTMLElement {
   }
 
   /**
-   * fetch resp. download through ipfs client
+   * Check if already fetching else forward to _fetch
    * 
    * @param {string} cid
    * @returns {{result: Promise<{response: Response|null, gateway:GATEWAY|null, isAbortError?:boolean}>, getAbortController: () => AbortController}}
    */
   fetch (cid) {
+    if (this.fetchProgressMap.has(cid)) return this.fetchProgressMap.get(cid)
+    const fetchResult = this._fetch(cid)
+    this.fetchProgressMap.set(cid, fetchResult)
+    fetchResult.result.then(result => this.fetchProgressMap.delete(cid))
+    return fetchResult
+  }
+
+  /**
+   * fetch resp. download through ipfs client
+   * 
+   * @param {string} cid
+   * @returns {{result: Promise<{response: Response|null, gateway:GATEWAY|null, isAbortError?:boolean}>, getAbortController: () => AbortController}}
+   */
+  _fetch (cid) {
     let abortController = new AbortController()
     const func = () => {
       const gatewayResult = this.getGateway('fetch')
@@ -648,7 +679,7 @@ export default class Ipfs extends HTMLElement {
           } else {
             this.setGatewayError(gatewayResult.gateway, 'hasError', true)
             if (!gatewayResult.ignoreError) {
-              const fetchResult = this.fetch(cid)
+              const fetchResult = this._fetch(cid)
               abortController = fetchResult.getAbortController()
               return fetchResult.result
             } else {
@@ -665,7 +696,7 @@ export default class Ipfs extends HTMLElement {
   }
 
   /**
-   * Description
+   * Check if already adding else forward to _add
    * 
    * @method
    * @name add
@@ -676,6 +707,27 @@ export default class Ipfs extends HTMLElement {
    * @returns {{result: Promise<{cid: string, error?: Error}>, getAbortController: () => AbortController}}
    */
   add (file, torrent = null) {
+    // @ts-ignore
+    const key = file.name || file.path
+    if (this.addProgressMap.has(key)) return this.addProgressMap.get(key)
+    const addResult = this._add(file, torrent)
+    this.addProgressMap.set(key, addResult)
+    addResult.result.then(result => this.addProgressMap.delete(key))
+    return addResult
+  }
+
+  /**
+   * Add to IPFS
+   * 
+   * @method
+   * @name add
+   * @kind method
+   * @memberof Ipfs
+   * @param {{path: string, content: ReadableStream}|File} file
+   * @param {any} [torrent=null]
+   * @returns {{result: Promise<{cid: string, error?: Error}>, getAbortController: () => AbortController}}
+   */
+  _add (file, torrent = null) {
     let abortController = new AbortController()
     const func = async () => {
       const createFileCid = async file => {
@@ -781,7 +833,7 @@ export default class Ipfs extends HTMLElement {
           } else {
             this.setGatewayError(gatewayResult.gateway, 'hasAddError', true)
             if (!gatewayResult.ignoreError) {
-              const addResult = this.add(file, torrent)
+              const addResult = this._add(file, torrent)
               abortController = addResult.getAbortController()
               return addResult.result
             } else {
