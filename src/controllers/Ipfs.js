@@ -219,6 +219,9 @@ export default class Ipfs extends HTMLElement {
         gateway.hasAddError = false
       })
       this.saveGateways()
+      this.catProgressMap.clear()
+      this.fetchProgressMap.clear()
+      this.addProgressMap.clear()
     }
   }
 
@@ -599,7 +602,7 @@ export default class Ipfs extends HTMLElement {
     if (this.catProgressMap.has(cid)) return this.catProgressMap.get(cid)
     const catResult = this._cat(cid)
     this.catProgressMap.set(cid, catResult)
-    catResult.result.then(result => this.catProgressMap.delete(cid))
+    catResult.result.finally(result => this.catProgressMap.delete(cid))
     return catResult
   }
 
@@ -654,7 +657,7 @@ export default class Ipfs extends HTMLElement {
     if (this.fetchProgressMap.has(cid)) return this.fetchProgressMap.get(cid)
     const fetchResult = this._fetch(cid)
     this.fetchProgressMap.set(cid, fetchResult)
-    fetchResult.result.then(result => this.fetchProgressMap.delete(cid))
+    fetchResult.result.finally(result => this.fetchProgressMap.delete(cid))
     return fetchResult
   }
 
@@ -712,7 +715,7 @@ export default class Ipfs extends HTMLElement {
     if (this.addProgressMap.has(key)) return this.addProgressMap.get(key)
     const addResult = this._add(file, torrent)
     this.addProgressMap.set(key, addResult)
-    addResult.result.then(result => this.addProgressMap.delete(key))
+    addResult.result.finally(result => this.addProgressMap.delete(key))
     return addResult
   }
 
