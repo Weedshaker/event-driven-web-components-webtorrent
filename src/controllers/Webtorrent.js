@@ -43,7 +43,7 @@ import { WebWorker } from '../event-driven-web-components-prototypes/src/WebWork
 /**
  * https://webtorrent.io/docs
  * hint: clear OPFS "await (await navigator.storage.getDirectory()).remove({ recursive: true })"
- * 
+ *
     async function listAllOPFSFiles(dirHandle, path = "") {
       for await (const [name, handle] of dirHandle.entries()) {
         const fullPath = path + name;
@@ -94,7 +94,7 @@ export default class Webtorrent extends WebWorker() {
     get has () {
       return key => {
         const value = this.map.get(key)
-        return value ? value.then(result => result.torrent.destroyed ? false : true) : Promise.resolve(false)
+        return value ? value.then(result => !result.torrent.destroyed) : Promise.resolve(false)
       }
     },
     /**
@@ -123,7 +123,7 @@ export default class Webtorrent extends WebWorker() {
     }
   }
 
-  constructor() {
+  constructor () {
     super()
 
     /** @type {string} */
@@ -145,29 +145,29 @@ export default class Webtorrent extends WebWorker() {
     // trackers
     let presetTrackers = this.hasAttribute('preset-trackers')
       ? [
-        'wss://tracker.openwebtorrent.com',
-        'wss://tracker.webtorrent.dev',
-        'udp://tracker.opentrackr.org:1337/announce',
-        'udp://9.rarbg.com:2810/announce',
-        'udp://tracker.torrent.eu.org:451/announce',
-        'udp://tracker.moeking.me:6969/announce',
-        'udp://tracker.dler.org:6969/announce',
-        'udp://tracker.altrosky.nl:6969/announce',
-        'udp://p4p.arenabg.com:1337/announce',
-        'udp://opentracker.i2p.rocks:6969/announce',
-        'udp://open.stealth.si:80/announce',
-        'udp://open.demonii.com:1337/announce',
-        'udp://explodie.org:6969/announce',
-        'udp://exodus.desync.com:6969/announce',
-        'https://tracker.nanoha.org:443/announce',
-        'https://tracker.lilithraws.org:443/announce',
-        'https://tr.burnabyhighstar.com:443/announce',
-        'https://opentracker.i2p.rocks:443/announce',
-        'http://tracker1.bt.moack.co.kr:80/announce',
-        'http://tracker.mywaifu.best:6969/announce',
-        'udp://zecircle.xyz:6969/announce',
-        'udp://www.peckservers.com:9000/announce'
-      ]
+          'wss://tracker.openwebtorrent.com',
+          'wss://tracker.webtorrent.dev',
+          'udp://tracker.opentrackr.org:1337/announce',
+          'udp://9.rarbg.com:2810/announce',
+          'udp://tracker.torrent.eu.org:451/announce',
+          'udp://tracker.moeking.me:6969/announce',
+          'udp://tracker.dler.org:6969/announce',
+          'udp://tracker.altrosky.nl:6969/announce',
+          'udp://p4p.arenabg.com:1337/announce',
+          'udp://opentracker.i2p.rocks:6969/announce',
+          'udp://open.stealth.si:80/announce',
+          'udp://open.demonii.com:1337/announce',
+          'udp://explodie.org:6969/announce',
+          'udp://exodus.desync.com:6969/announce',
+          'https://tracker.nanoha.org:443/announce',
+          'https://tracker.lilithraws.org:443/announce',
+          'https://tr.burnabyhighstar.com:443/announce',
+          'https://opentracker.i2p.rocks:443/announce',
+          'http://tracker1.bt.moack.co.kr:80/announce',
+          'http://tracker.mywaifu.best:6969/announce',
+          'udp://zecircle.xyz:6969/announce',
+          'udp://www.peckservers.com:9000/announce'
+        ]
       : []
     // @ts-ignore
     if (this.getAttribute('preset-trackers') && typeof this.getAttribute('preset-trackers') === 'string') presetTrackers = this.getAttribute('preset-trackers').split(',')
@@ -175,19 +175,19 @@ export default class Webtorrent extends WebWorker() {
     if (Environment?.trackers) presetTrackers = Environment.trackers.concat(presetTrackers)
     if (this.hasAttribute('fetch-trackers')) {
       this.addOpts = fetch(this.getAttribute('fetch-trackers') || 'https://cdn.jsdelivr.net/gh/ngosang/trackerslist@master/trackers_best.txt').then(response => {
-          if (response.status >= 200 && response.status <= 299) return response.text()
-          throw new Error(response.statusText)
+        if (response.status >= 200 && response.status <= 299) return response.text()
+        throw new Error(response.statusText)
       }).then(text => text.split('\n').filter(text => text)).then(trackers => ({
         announce: Array.from(new Set([
           ...presetTrackers,
           ...trackers
         ])),
         ...presetAddOpts
-      })).catch(error => ({announce: presetTrackers, ...presetAddOpts}))
+      })).catch(error => ({ announce: presetTrackers, ...presetAddOpts }))
     } else {
-      this.addOpts = Promise.resolve({announce: presetTrackers, ...presetAddOpts})
+      this.addOpts = Promise.resolve({ announce: presetTrackers, ...presetAddOpts })
     }
-    
+
     // expects the following event.detail:
     // torrentId string - files to add to webtorrent
     // destroyOpts Object - shall already existing torrents be destroyed
@@ -217,7 +217,7 @@ export default class Webtorrent extends WebWorker() {
         if (existingResult) {
           if (event.detail.destroyOpts === undefined) {
             this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(existingResult.torrent), location.href, event.detail.uid, event.detail.room, event.detail.timestamp, cid)
-            return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, {...existingResult, existingResult: true}, existingResult.torrent)
+            return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, { ...existingResult, existingResult: true }, existingResult.torrent)
           } else {
             await Webtorrent.destroyTorrent(existingResult.torrent, infoHash, event.detail.destroyOpts) // If opts.destroyStore is specified, it will override opts.destroyStoreOnDestroy passed when the torrent was added.
           }
@@ -288,7 +288,7 @@ export default class Webtorrent extends WebWorker() {
       torrent = client.add(torrentId, Object.assign(event.detail.opts || {}, await this.addOpts))
       if (torrentContainer?.paused) torrent.pause()
       /** @type {WEBTORRENT_ADD_SEED_RESULT} */
-      const result = {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise, uid: event.detail.uid, room: event.detail.room, cid, resetResume: event.detail.resetResume, pinned: torrentContainer?.pinned}
+      const result = { torrent, streamToServerReadyPromise: this.streamToServerReadyPromise, uid: event.detail.uid, room: event.detail.room, cid, resetResume: event.detail.resetResume, pinned: torrentContainer?.pinned }
       torrentMapResolve(result)
       // save to storage
       this.onReady(torrent, event.detail.uid, event.detail.room, event.detail.timestamp, cid, event.detail.isSelf || false, undefined, false)
@@ -296,15 +296,17 @@ export default class Webtorrent extends WebWorker() {
       this.onError(torrent)
       this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, result, result.torrent, () => {
         // inform ipfs about this cid to addWebSeed to the torrent when torrent.on 'infoHash'
-        if (cid) this.dispatchEvent(new CustomEvent('ipfs-add-web-seed', {
-          detail: {
-            cid,
-            torrent
-          },
-          bubbles: true,
-          cancelable: true,
-          composed: true
-        }))
+        if (cid) {
+          this.dispatchEvent(new CustomEvent('ipfs-add-web-seed', {
+            detail: {
+              cid,
+              torrent
+            },
+            bubbles: true,
+            cancelable: true,
+            composed: true
+          }))
+        }
       })
     }
 
@@ -339,7 +341,7 @@ export default class Webtorrent extends WebWorker() {
           if (existingTorrent) {
             if (existingTorrent.done) {
               // Not needed to onReady, onInfoHash or onError because this torrent must have been saved when loaded
-              return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {torrent: existingTorrent, streamToServerReadyPromise: this.streamToServerReadyPromise}, existingTorrent)
+              return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, { torrent: existingTorrent, streamToServerReadyPromise: this.streamToServerReadyPromise }, existingTorrent)
             } else {
               await Webtorrent.destroyTorrent(existingTorrent, existingTorrent.infoHash.toLowerCase())
               torrent = await addOrSeedFunc(input, event.detail.opts)
@@ -347,12 +349,12 @@ export default class Webtorrent extends WebWorker() {
               // save to storage
               this.onReady(torrent, event.detail.uid, event.detail.room, event.detail.timestamp, event.detail.cid, true, false, false)
               this.onError(torrent)
-              return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise}, torrent)
+              return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, { torrent, streamToServerReadyPromise: this.streamToServerReadyPromise }, torrent)
             }
           }
         }
       }, 200)
-      this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {torrent, streamToServerReadyPromise: this.streamToServerReadyPromise}, torrent, () => clearInterval(checkTorrentDestroyedIntervalId))
+      this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, { torrent, streamToServerReadyPromise: this.streamToServerReadyPromise }, torrent, () => clearInterval(checkTorrentDestroyedIntervalId))
     }
 
     this.webtorrentResetEventListener = event => this.reset(event.detail?.checkIfStalled)
@@ -360,19 +362,21 @@ export default class Webtorrent extends WebWorker() {
     this.webtorrentPauseEventListener = async event => {
       if (event.detail.pause) {
         event.detail.torrent.pause()
-        this.webWorker(Webtorrent.saveTorrentContainer,Webtorrent.extractTorrentSimpleObj(event.detail.torrent), undefined, undefined, undefined, undefined, undefined, undefined, undefined, true)
+        this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(event.detail.torrent), undefined, undefined, undefined, undefined, undefined, undefined, undefined, true)
       } else {
         event.detail.torrent.resume()
         this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(event.detail.torrent), undefined, undefined, undefined, undefined, undefined, undefined, undefined, false)
         let addSeedResult
-        if (event.detail.torrent?.done && (addSeedResult = await Webtorrent.#torrentMap.get(event.detail.torrent.infoHash)) && addSeedResult.cid) this.dispatchEvent(new CustomEvent('ipfs-seed', {
-          detail: {
-            torrent: event.detail.torrent
-          },
-          bubbles: true,
-          cancelable: true,
-          composed: true
-        }))
+        if (event.detail.torrent?.done && (addSeedResult = await Webtorrent.#torrentMap.get(event.detail.torrent.infoHash)) && addSeedResult.cid) {
+          this.dispatchEvent(new CustomEvent('ipfs-seed', {
+            detail: {
+              torrent: event.detail.torrent
+            },
+            bubbles: true,
+            cancelable: true,
+            composed: true
+          }))
+        }
       }
     }
 
@@ -398,42 +402,46 @@ export default class Webtorrent extends WebWorker() {
       // every 3rd time reset
       if (resetCounter % 3 === 2) this.reset()
       // show reload icon at fourth reset click
-      if (resetCounter === 3) this.dispatchEvent(new CustomEvent('hint-reload', {
-        bubbles: true,
-        cancelable: true,
-        composed: true
-      }))
+      if (resetCounter === 3) {
+        this.dispatchEvent(new CustomEvent('hint-reload', {
+          bubbles: true,
+          cancelable: true,
+          composed: true
+        }))
+      }
       resetCounter++
     }
 
     this.webtorrentViewIsStalledEventListener = async event => {
       let torrentContainer
       if (!event.detail.torrent.done && !event.detail.torrent.paused && (torrentContainer = (await Webtorrent.#torrentMap.get(event.detail.torrent.infoHash)))) {
-        if (torrentContainer.cid) new Promise(resolve => this.dispatchEvent(new CustomEvent('ipfs-cat', {
-          detail: {
-            torrent: torrentContainer.torrent || event.detail.torrent,
-            uid: event.detail.uid || torrentContainer.uid,
-            room: torrentContainer.room,
-            cid: torrentContainer.cid,
-            resolve
-          },
-          bubbles: true,
-          cancelable: true,
-          composed: true
-        }))).then(result => {
-          if (Array.isArray(result.files) && result.files.length && result.files.every(file => file)) {
-            this.webtorrentSeedEventListener({
-              detail: {
-                input: result.files,
-                uid: event.detail.uid || torrentContainer.uid,
-                room: torrentContainer.room,
-                cid: torrentContainer.cid
-              }
-            })
-          } else {
-            this.reset()
-          }
-        })
+        if (torrentContainer.cid) {
+          new Promise(resolve => this.dispatchEvent(new CustomEvent('ipfs-cat', {
+            detail: {
+              torrent: torrentContainer.torrent || event.detail.torrent,
+              uid: event.detail.uid || torrentContainer.uid,
+              room: torrentContainer.room,
+              cid: torrentContainer.cid,
+              resolve
+            },
+            bubbles: true,
+            cancelable: true,
+            composed: true
+          }))).then(result => {
+            if (Array.isArray(result.files) && result.files.length && result.files.every(file => file)) {
+              this.webtorrentSeedEventListener({
+                detail: {
+                  input: result.files,
+                  uid: event.detail.uid || torrentContainer.uid,
+                  room: torrentContainer.room,
+                  cid: torrentContainer.cid
+                }
+              })
+            } else {
+              this.reset()
+            }
+          })
+        }
       }
     }
 
@@ -444,9 +452,7 @@ export default class Webtorrent extends WebWorker() {
       if (event.detail?.torrentId && !fileErrorTorrentId.includes(event.detail.torrentId)) {
         if (!event.detail?.wasStreaming) {
           // not streaming, file errors within 2s do not check if stalled
-          this.reset(fileErrorTimestamp + 2000 < Date.now()
-            ? false
-            : true
+          this.reset(!(fileErrorTimestamp + 2000 < Date.now())
           )
         }
         fileErrorTimestamp = Date.now()
@@ -467,7 +473,7 @@ export default class Webtorrent extends WebWorker() {
       const torrentContainers = (await this.webWorker(Webtorrent.loadTorrentContainers))
         .filter(torrentContainer => !torrentContainer.deleted && (event.detail.infoHash ? event.detail.infoHash === torrentContainer.infoHash : torrentContainer.added?.some(added => Number(added.timestamp) === event.detail.timestamp)))
       for (const torrentContainer of torrentContainers) {
-        const {torrent, error}  = await new Promise(resolve => this.webtorrentAddEventListener({
+        const { torrent, error } = await new Promise(resolve => this.webtorrentAddEventListener({
           detail: {
             torrentId: torrentContainer.magnetURI,
             resolve
@@ -475,10 +481,10 @@ export default class Webtorrent extends WebWorker() {
         }))
         if (!torrent || error) break
         if (event.detail.infoHash ? event.detail.infoHash === torrentContainer.infoHash : torrentContainer.added?.every(added => added.timestamp === undefined || Number(added.timestamp) === event.detail.timestamp)) {
-          await Webtorrent.destroyTorrent(torrent, torrentContainer.infoHash || torrent.infoHash, {destroyStore: true})
+          await Webtorrent.destroyTorrent(torrent, torrentContainer.infoHash || torrent.infoHash, { destroyStore: true })
           this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, event.detail.deleted === undefined ? 'destroyStore' : event.detail.deleted)
         } else {
-          this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, [{key: 'timestamp', value: event.detail.timestamp}])
+          this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, [{ key: 'timestamp', value: event.detail.timestamp }])
         }
       }
     }
@@ -488,7 +494,7 @@ export default class Webtorrent extends WebWorker() {
       const torrentContainers = (await this.webWorker(Webtorrent.loadTorrentContainers))
         .filter(torrentContainer => !torrentContainer.deleted && torrentContainer.added?.some(added => event.detail.rooms.includes(added.room)))
       for (const torrentContainer of torrentContainers) {
-        const {torrent, error, existingResult}  = await new Promise(resolve => this.webtorrentAddEventListener({
+        const { torrent, error, existingResult } = await new Promise(resolve => this.webtorrentAddEventListener({
           detail: {
             torrentId: torrentContainer.magnetURI,
             resolve
@@ -496,14 +502,14 @@ export default class Webtorrent extends WebWorker() {
         }))
         if (!torrent || error) break
         if (torrentContainer.added?.every(added => added.room === undefined || event.detail.rooms.includes(added.room))) {
-          await Webtorrent.destroyTorrent(torrent, torrentContainer.infoHash || torrent.infoHash, {destroyStore: true})
+          await Webtorrent.destroyTorrent(torrent, torrentContainer.infoHash || torrent.infoHash, { destroyStore: true })
           this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'destroyStore')
         } else {
-          this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), undefined, undefined, undefined, undefined, undefined, undefined, undefined, existingResult, undefined, event.detail.rooms.map(room => ({key: 'room', value: room})))
+          this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), undefined, undefined, undefined, undefined, undefined, undefined, undefined, existingResult, undefined, event.detail.rooms.map(room => ({ key: 'room', value: room })))
         }
       }
     }
-    
+
     this.onlineEventListener = event => this.reset(true)
   }
 
@@ -536,7 +542,7 @@ export default class Webtorrent extends WebWorker() {
             client.createServer({ controller })
             isStreamToServerReadyResolve(controller)
           } else {
-            controller.active?.addEventListener('statechange', event => createServer(), {once: true})
+            controller.active?.addEventListener('statechange', event => createServer(), { once: true })
           }
         }
         createServer()
@@ -721,7 +727,7 @@ export default class Webtorrent extends WebWorker() {
   onInfoHash (torrent, uid, room, cid, resetResume) {
     const infoHashFuc = () => {
       const infoHash = torrent.infoHash.toLowerCase()
-      Webtorrent.#torrentMap.set(infoHash, Promise.resolve({torrent, streamToServerReadyPromise: this.streamToServerReadyPromise, uid, room, cid, resetResume}))
+      Webtorrent.#torrentMap.set(infoHash, Promise.resolve({ torrent, streamToServerReadyPromise: this.streamToServerReadyPromise, uid, room, cid, resetResume }))
       this.dispatchEvent(new CustomEvent(`${this.namespace}${infoHash}`, {
         detail: {
           infoHash
@@ -752,14 +758,16 @@ export default class Webtorrent extends WebWorker() {
     const doneFunc = () => {
       // this function has to be called from time to time, cleaning OPFS
       this.estimateAndRemoveExceedingEntries()
-      if (cid && !torrent.paused) this.dispatchEvent(new CustomEvent('ipfs-seed', {
-        detail: {
-          torrent
-        },
-        bubbles: true,
-        cancelable: true,
-        composed: true
-      }))
+      if (cid && !torrent.paused) {
+        this.dispatchEvent(new CustomEvent('ipfs-seed', {
+          detail: {
+            torrent
+          },
+          bubbles: true,
+          cancelable: true,
+          composed: true
+        }))
+      }
     }
     if (torrent.done) {
       doneFunc()
@@ -786,14 +794,14 @@ export default class Webtorrent extends WebWorker() {
         let usage = navigatorUsage
         for (const torrentContainer of torrentContainers) {
           if (usage < quota) break
-          const {torrent, error}  = await new Promise(resolve => this.webtorrentAddEventListener({
+          const { torrent, error } = await new Promise(resolve => this.webtorrentAddEventListener({
             detail: {
               torrentId: torrentContainer.magnetURI,
               resolve
             }
           }))
           if (torrent && !error) {
-            await Webtorrent.destroyTorrent(torrent, torrentContainer.infoHash || torrent.infoHash, {destroyStore: true})
+            await Webtorrent.destroyTorrent(torrent, torrentContainer.infoHash || torrent.infoHash, { destroyStore: true })
             await this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(torrent), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, true)
           }
           usage -= torrentContainer.length || torrent.length
@@ -804,7 +812,7 @@ export default class Webtorrent extends WebWorker() {
 
   /**
    * NOTE: This function must run in a webworker, otherwise getFileHandle does not have the function: createSyncAccessHandle
-   * 
+   *
    * @async
    * @static
    * @param {any} torrent
@@ -833,7 +841,7 @@ export default class Webtorrent extends WebWorker() {
       } catch (err) {
         // just continue and try to set deleted = true
       }
-    } 
+    }
     // @ts-ignore
     const access = await (await torrentsDir.getFileHandle(infoHash, { create: true })).createSyncAccessHandle({ mode: 'readwrite' })
     // read whats there
@@ -848,16 +856,16 @@ export default class Webtorrent extends WebWorker() {
       torrentContainer = {}
     }
     torrentContainer = {
-      added: deleted 
+      added: deleted
         ? []
         : href || uid || room || timestamp
           ? [{
-            timestamp: timestamp,
-            href,
-            uid,
-            room
+              timestamp,
+              href,
+              uid,
+              room
             // @ts-ignore
-          }].concat(torrentContainer.added || [])
+            }].concat(torrentContainer.added || [])
           : torrentContainer.added || [],
       room: torrentContainer.room === undefined ? room : torrentContainer.room,
       cid: torrentContainer.cid === undefined ? cid : torrentContainer.cid,
@@ -875,7 +883,7 @@ export default class Webtorrent extends WebWorker() {
         ? Array.from(torrent.torrentFile)
         : torrentContainer.torrentFile
     }
-    deleteAdded.forEach(({key, value}) => {
+    deleteAdded.forEach(({ key, value }) => {
       torrentContainer.added = torrentContainer.added?.reduce((acc, added) => {
         // @ts-ignore
         if (value && (isNaN(value) ? added[key] === value : Number(added[key]) === value)) return acc
@@ -908,7 +916,7 @@ export default class Webtorrent extends WebWorker() {
   /**
    * NOTE: This function must run in a webworker, otherwise getFileHandle does not have the function: createSyncAccessHandle
    * returns one (with infoHash) or all torrent containers
-   * 
+   *
    * @async
    * @static
    * @param {string} [infoHash='']

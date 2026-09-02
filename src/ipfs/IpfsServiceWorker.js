@@ -17,7 +17,7 @@ const IpfsServiceWorker = (ChosenExtend = class {}) => class IpfsServiceWorker e
       return event.respondWith(new Response('Files metadata required', { status: 400 })) || true
     }
     const fileName = decodeURIComponent(pathname.replace(/^.*\/(.*)$/, '$1'))
-    const {parts: partsRange, rangeTotal} = IpfsServiceWorker.resolveRange(filesMetadata, fileName, rangeStart, rangeEnd)
+    const { parts: partsRange, rangeTotal } = IpfsServiceWorker.resolveRange(filesMetadata, fileName, rangeStart, rangeEnd)
     if (partsRange === undefined || !partsRange.length || rangeTotal === undefined) return event.respondWith(new Response(`FileName: ${fileName} not found in files metadata`, { status: 400 })) || true
     const headers = rangeStart === undefined
       ? {
@@ -26,11 +26,11 @@ const IpfsServiceWorker = (ChosenExtend = class {}) => class IpfsServiceWorker e
           'Content-Length': String(rangeTotal)
         }
       : {
-        'Content-Type': 'application/octet-stream',
-        'Accept-Ranges': 'bytes',
-        'Content-Range': `bytes ${rangeStart}-${rangeEnd || ''}/${rangeTotal}`,
-        'Content-Length': rangeEnd ? String(rangeEnd - rangeStart + 1) : String(rangeTotal) // 0-0 starts with 1 thats why it must be added here
-      }
+          'Content-Type': 'application/octet-stream',
+          'Accept-Ranges': 'bytes',
+          'Content-Range': `bytes ${rangeStart}-${rangeEnd || ''}/${rangeTotal}`,
+          'Content-Length': rangeEnd ? String(rangeEnd - rangeStart + 1) : String(rangeTotal) // 0-0 starts with 1 thats why it must be added here
+        }
     return event.respondWith(new Response(IpfsServiceWorker.createMultipartStream(directoryRoot, partsRange), {
       status: rangeStart === undefined ? 200 : 206,
       headers
@@ -38,17 +38,19 @@ const IpfsServiceWorker = (ChosenExtend = class {}) => class IpfsServiceWorker e
   }
 
   // calculates the range per file, since start and end span multiple files
-  static resolveRange(files, fileName, start, end) {
+  static resolveRange (files, fileName, start, end) {
     const file = files.length === 1
       ? files[0]
       : files.find(file => file.name === fileName)
     if (!file) return false
-    return {parts: [{
-      name: file.cid,
-      start,
-      end,
-      total: file.length - 1
-    }], rangeTotal: file.length - 1 /* -1 because it starts at 0 */}
+    return {
+      parts: [{
+        name: file.cid,
+        start,
+        end,
+        total: file.length - 1
+      }],
+      rangeTotal: file.length - 1 /* -1 because it starts at 0 */ }
   }
   /*
   // the below chooses by range and not by fileName, not sure if this works with some bep definitions, but can be deleted if not needed
@@ -75,17 +77,17 @@ const IpfsServiceWorker = (ChosenExtend = class {}) => class IpfsServiceWorker e
   */
 
   // this function makes a whole stream, which can spawn multiple files (parts) and stitches it into one
-  static createMultipartStream(directoryRoot, parts) {
+  static createMultipartStream (directoryRoot, parts) {
     return new ReadableStream({
-      async start(controller) {
+      async start (controller) {
         try {
           for (const part of parts) {
             const response = await fetch(`${directoryRoot}/${part.name}`, {
               headers: part.start === undefined
                 ? {}
                 : {
-                  Range: part.end ? `bytes=${part.start}-${part.end}` : `bytes=${part.start}-${part.total}`
-                }
+                    Range: part.end ? `bytes=${part.start}-${part.end}` : `bytes=${part.start}-${part.total}`
+                  }
             })
             if (!response.ok) throw new Error(`Bad response: ${response.status}`)
             const reader = response.body.getReader()
@@ -104,4 +106,4 @@ const IpfsServiceWorker = (ChosenExtend = class {}) => class IpfsServiceWorker e
   }
 }
 // Start the worker
-//const IpfsServiceWorker = new (IpfsServiceWorker())() // eslint-disable-line
+// const IpfsServiceWorker = new (IpfsServiceWorker())() // eslint-disable-line

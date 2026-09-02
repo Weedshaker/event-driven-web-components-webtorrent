@@ -14,9 +14,9 @@ import { Intersection } from '../event-driven-web-components-prototypes/src/Inte
  * @return {CustomElementConstructor | *}
  */
 export default class Webtorrent extends Intersection() {
-  constructor(options = {}, ...args) {
+  constructor (options = {}, ...args) {
     super({ importMetaUrl: import.meta.url, tabindex: 'no-tabindex', intersectionObserverInit: {}, ...options }, ...args)
-    
+
     // set attribute namespace
     this.namespace = this.getAttribute('namespace') || 'webtorrent-'
     this.torrentId = this.getAttribute('torrent-id') || encodeURI(Array.from((new URL(location.href)).searchParams).reduce((acc, curr) => curr[0] === 'torrent-id'
@@ -37,7 +37,7 @@ export default class Webtorrent extends Intersection() {
 
     this.mediaResumeMap = new Map()
     this.mediaResumeMaxTimeout = 5000
-    
+
     this.stallTimeout = 10000
     const stillScrollAfter = 3000
 
@@ -70,7 +70,7 @@ export default class Webtorrent extends Intersection() {
         // stop cycle after 10 and reaching status 3
         if (errorCounter < 10 || errorCounterStatus === 3) {
           this.setAttribute('error', '')
-          this.renderTorrent(errorCounterStatus === 1 || errorCounterStatus === 2 ? true : false, errorCounterStatus === 3 ? true : false, (errorCounterStatus === 0 && initTimestamp + stillScrollAfter > Date.now())).then(() => {
+          this.renderTorrent(!!(errorCounterStatus === 1 || errorCounterStatus === 2), errorCounterStatus === 3, (errorCounterStatus === 0 && initTimestamp + stillScrollAfter > Date.now())).then(() => {
             if (errorCounterStatus < 2) this.removeAttribute('error')
             this.dispatchEvent(new CustomEvent(`${this.namespace}view-file-error`, {
               detail: {
@@ -149,15 +149,17 @@ export default class Webtorrent extends Intersection() {
     }
 
     this.downloadClickLinkEventListener = event => {
-      if (this.torrent) this.torrent.files.forEach(async file => this.getBlob(file, await this.keyContainer).then(blob => {
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.target = '_blank'
-        a.download = file.name
-        a.click()
-        URL.revokeObjectURL(url)
-      }))
+      if (this.torrent) {
+        this.torrent.files.forEach(async file => this.getBlob(file, await this.keyContainer).then(blob => {
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.target = '_blank'
+          a.download = file.name
+          a.click()
+          URL.revokeObjectURL(url)
+        }))
+      }
     }
 
     let resetCounter = 0
@@ -168,12 +170,10 @@ export default class Webtorrent extends Intersection() {
       }
       let assignedElement
       if (assignedElement = this.resetLink.children[0]?.assignedElements()?.[0]) {
-        assignedElement.addEventListener('transitionend', event => assignedElement.removeAttribute('rotate'), {once: true})
+        assignedElement.addEventListener('transitionend', event => assignedElement.removeAttribute('rotate'), { once: true })
         assignedElement.setAttribute('rotate', '360deg')
       }
       this.renderTorrent(resetCounter > 0
-        ? true
-        : false
       )
       this.dispatchEvent(new CustomEvent(`${this.namespace}view-reset-link-click`, {
         detail: {
@@ -249,8 +249,8 @@ export default class Webtorrent extends Intersection() {
       if (typeof this.activityFunc === 'function') this.activityFunc()
       if (ipfsDone && event.detail.status !== 'error') return
       const bytesUploaded = (event.detail.gateway && ipfsProgressMap.has(event.detail.gateway.origin) && event.detail.bytesUploaded !== undefined
-            ? ipfsProgressMap.get(event.detail.gateway.origin) + event.detail.bytesUploaded
-            : event.detail.bytesUploaded) || 0
+        ? ipfsProgressMap.get(event.detail.gateway.origin) + event.detail.bytesUploaded
+        : event.detail.bytesUploaded) || 0
       const status = bytesUploaded >= event.detail.torrent.length
         ? 'done'
         : event.detail.status
@@ -263,7 +263,7 @@ export default class Webtorrent extends Intersection() {
           }
           ipfsProgressMap.set(event.detail.gateway.origin, bytesUploaded)
           this.ipfsStatusEl.textContent = `Uploading to ${event.detail.gateway.origin}`
-          this.ipfsProgressEl.textContent = `${(bytesUploaded / event.detail.torrent.length *100).toFixed(1)}%`
+          this.ipfsProgressEl.textContent = `${(bytesUploaded / event.detail.torrent.length * 100).toFixed(1)}%`
           this.ipfsUploadedEl.textContent = Webtorrent.formatBytes(bytesUploaded)
           this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
           this.ipfsStatusTimeout = setTimeout(() => this.details.setAttribute('open', ''), 1000)
@@ -294,7 +294,7 @@ export default class Webtorrent extends Intersection() {
     }
   }
 
-  connectedCallback() {
+  connectedCallback () {
     super.connectedCallback()
     this.hidden = true
     const showPromises = []
@@ -675,7 +675,7 @@ export default class Webtorrent extends Intersection() {
 
   /**
    * Get torrent and render
-   * 
+   *
    * @param {true|false|'destroyStore'} [resetTorrent=false]
    * @param {boolean} [forceRenderToLink=false]
    * @param {boolean} [keepScroll=false]
@@ -694,7 +694,7 @@ export default class Webtorrent extends Intersection() {
     // reset previous render
     if (keepScroll) await this.updateHeight()
     // clear previous torrent media elements
-    this.webtorrentTargetElements.forEach(({renderTarget, appendTarget, figureTarget}) => {
+    this.webtorrentTargetElements.forEach(({ renderTarget, appendTarget, figureTarget }) => {
       renderTarget.remove()
       appendTarget.remove()
       figureTarget?.remove()
@@ -704,7 +704,7 @@ export default class Webtorrent extends Intersection() {
     this.progressBar.innerHTML = ''
     this.resetLink.children[0]?.assignedElements()?.[0].removeAttribute('rotate')
     // set new elements
-    const {appendTarget: progressTarget, renderTarget: progressElement} = Webtorrent.getElement(this, 'progress', 'initializing...', 'progress', false)
+    const { appendTarget: progressTarget, renderTarget: progressElement } = Webtorrent.getElement(this, 'progress', 'initializing...', 'progress', false)
     progressTarget.setAttribute('max', '100')
     this.progressBar.appendChild(progressTarget)
     this.fileNameEl.textContent = this.fileName
@@ -719,7 +719,7 @@ export default class Webtorrent extends Intersection() {
           room: this.getAttribute('room'),
           isSelf: this.hasAttribute('self'),
           torrentId: this.torrentId,
-          destroyOpts: resetTorrent === true ? {destroyStore: false} : resetTorrent === 'destroyStore' ? {destroyStore: true} : undefined,
+          destroyOpts: resetTorrent === true ? { destroyStore: false } : resetTorrent === 'destroyStore' ? { destroyStore: true } : undefined,
           force,
           resolve
         },
@@ -727,14 +727,14 @@ export default class Webtorrent extends Intersection() {
         cancelable: true,
         composed: true
       }))
-    }).then(({torrent, streamToServerReadyPromise, error, pinned}) => {
+    }).then(({ torrent, streamToServerReadyPromise, error, pinned }) => {
       if (error === 'deleted') {
         this.torrent = null
         this.removeAttribute('has-torrent')
         this.setAttribute('deleted', '')
         this.removeAttribute('updating')
         this.removeEventListener('click', this.deletedClickEventListener)
-        this.addEventListener('click', this.deletedClickEventListener, {once: true})
+        this.addEventListener('click', this.deletedClickEventListener, { once: true })
         this.updateHeight()
         return
       } else {
@@ -812,11 +812,15 @@ export default class Webtorrent extends Intersection() {
           this.torrentDownloadSpeedEl.innerHTML = `&darr;${Webtorrent.formatBytes(torrent.downloadSpeed, true)}`
           this.torrentUploadSpeedEl.innerHTML = `&uarr;${Webtorrent.formatBytes(torrent.uploadSpeed, true)}`
           this.torrentTimeRemainingEl.textContent = torrent.timeRemaining ? `${Webtorrent.formatTimeRemaining(torrent.timeRemaining)} remaining` : ''
-          if (torrent.ipfsStatus) this.ipfsStatusEventListener({detail: {
-            status: torrent.ipfsStatus,
-            torrent,
-            gateway: {origin: 'ipfs'},
-          }})
+          if (torrent.ipfsStatus) {
+            this.ipfsStatusEventListener({
+              detail: {
+                status: torrent.ipfsStatus,
+                torrent,
+                gateway: { origin: 'ipfs' }
+              }
+            })
+          }
         }
         intervalFunc()
         clearInterval(this.intervalID)
@@ -836,19 +840,21 @@ export default class Webtorrent extends Intersection() {
         } else {
           this.webtorrentTargetElements = this.webtorrentTargetElements.concat(await this.renderFilesTo(torrent, this, this.summary, streamToServerReadyPromise, tagName, streamOrDoneFunc))
         }
-        this.webtorrentTargetElements.forEach(({renderTarget}) => {
+        this.webtorrentTargetElements.forEach(({ renderTarget }) => {
           const loadedEventListener = event => {
             this.updateHeight()
             this.removeAttribute('updating')
-            if (keepScroll) this.dispatchEvent(new CustomEvent(`${this.namespace}load`, {
-              detail: {
-                origEvent: event,
-                torrentId: this.torrentId
-              },
-              bubbles: true,
-              cancelable: true,
-              composed: true
-            }))
+            if (keepScroll) {
+              this.dispatchEvent(new CustomEvent(`${this.namespace}load`, {
+                detail: {
+                  origEvent: event,
+                  torrentId: this.torrentId
+                },
+                bubbles: true,
+                cancelable: true,
+                composed: true
+              }))
+            }
           }
           if (['audio', 'video'].includes(renderTarget.tagName.toLowerCase())) {
             renderTarget.addEventListener('loadedmetadata', event => {
@@ -863,11 +869,13 @@ export default class Webtorrent extends Intersection() {
                 }
               }
             })
-            if (!this.hasAttribute('no-media-resume')) renderTarget.addEventListener('timeupdate', event => this.mediaResumeMap.set(torrent.name, {
-              currentTime: renderTarget.currentTime,
-              timestamp: Date.now()
-            }))
-            renderTarget.addEventListener('canplay', loadedEventListener, {once: true})
+            if (!this.hasAttribute('no-media-resume')) {
+              renderTarget.addEventListener('timeupdate', event => this.mediaResumeMap.set(torrent.name, {
+                currentTime: renderTarget.currentTime,
+                timestamp: Date.now()
+              }))
+            }
+            renderTarget.addEventListener('canplay', loadedEventListener, { once: true })
           } else {
             renderTarget.addEventListener('load', loadedEventListener)
           }
@@ -887,7 +895,7 @@ export default class Webtorrent extends Intersection() {
     const videoResults = results.filter(result => result.tagName === 'video')
     if (videoResults.length === 1) {
       targetContainer.prepend(videoResults[0].appendTarget)
-      results.forEach(async ({renderTarget, appendTarget, figureTarget, tagName, file}) => {
+      results.forEach(async ({ renderTarget, appendTarget, figureTarget, tagName, file }) => {
         if (tagName === 'track') {
           videoResults[0].renderTarget.appendChild(renderTarget)
         } else if (tagName === 'img') {
@@ -902,7 +910,7 @@ export default class Webtorrent extends Intersection() {
         }
       })
     } else {
-      results.forEach(({appendTarget, tagName}) => {
+      results.forEach(({ appendTarget, tagName }) => {
         if (tagName === 'track') {
           const videoOrAudio = results.find(result => ['audio', 'video'].includes(result.tagName))
           if (videoOrAudio) videoOrAudio.renderTarget.appendChild(appendTarget)
@@ -922,7 +930,7 @@ export default class Webtorrent extends Intersection() {
         file.on('iterator', ({ iterator, file, req }, cb) => {
           this.wasStreaming = true
           // decrypt on each iteration the requested chunks
-          cb((async function* () {
+          cb((async function * () {
             const [, start, end] = (/bytes=(\d+)-(\d*)/.exec(req?.headers?.range) || []).map(num => Number(num))
             const decryptedStream = await new Promise(async resolve => webComponent.dispatchEvent(new CustomEvent('yjs-decrypt', {
               detail: {
@@ -932,7 +940,7 @@ export default class Webtorrent extends Intersection() {
                   iv: new Uint8Array(iv.split(',')),
                   name: 'wormhole-crypto',
                   key: keyContainer.key.epoch,
-                  start: start ? start : 0,
+                  start: start || 0,
                   length: end ? end - start + 1 : file.length - 1,
                   fileLength: file.length
                 },
@@ -951,7 +959,7 @@ export default class Webtorrent extends Intersection() {
             })
             if (!decryptedStream) {
               // fallback to original iterator (must stay valid)
-              yield* iterator
+              yield * iterator
               return
             }
             const reader = decryptedStream.getReader()
@@ -980,7 +988,7 @@ export default class Webtorrent extends Intersection() {
     }
     let targetAttribute
     if (!tagName) [tagName, targetAttribute] = Webtorrent.getTagNameByMimeType(file.type, file.path)
-    const {renderTarget, appendTarget, figureTarget} = Webtorrent.getElement(webComponent, tagName, file.name, fileCount)
+    const { renderTarget, appendTarget, figureTarget } = Webtorrent.getElement(webComponent, tagName, file.name, fileCount)
     if (append) targetContainer.prepend(appendTarget)
     if (tagName === 'a') {
       renderTarget.setAttribute('target', '_blank')
@@ -1003,7 +1011,7 @@ export default class Webtorrent extends Intersection() {
         renderTarget.setAttribute(targetAttribute || 'src', URL.createObjectURL(await this.getBlob(file, keyContainer)))
       }
     }
-    return {renderTarget, appendTarget, figureTarget, file, tagName}
+    return { renderTarget, appendTarget, figureTarget, file, tagName }
   }
 
   async getBlob (file, keyContainer) {
@@ -1046,7 +1054,7 @@ export default class Webtorrent extends Intersection() {
 
   /**
    * create the element by tagname and wrap it into a figure when applicable
-   * 
+   *
    * @static
    * @param {any} webComponent
    * @param {string} tagName
@@ -1056,12 +1064,12 @@ export default class Webtorrent extends Intersection() {
    * @returns {{ renderTarget: any; appendTarget: any; figureTarget: any; }}
    */
   static getElement (webComponent, tagName, fileName, fileCount, useFigure = undefined) {
-    const {slot, target} = Webtorrent.getSlotAndTarget(tagName, webComponent, fileCount)
+    const { slot, target } = Webtorrent.getSlotAndTarget(tagName, webComponent, fileCount)
     let appendTarget = slot || target
     let figureTarget
     // figcaption
     if (useFigure === true || (useFigure !== false && tagName !== 'a' && tagName !== 'track')) {
-      const {slot: figureSlot, target: figure} = Webtorrent.getSlotAndTarget('figure', webComponent, fileCount)
+      const { slot: figureSlot, target: figure } = Webtorrent.getSlotAndTarget('figure', webComponent, fileCount)
       figureTarget = figure
       appendTarget = figureSlot || figureTarget
       figureTarget.appendChild(figureSlot ? target : slot || target)
@@ -1069,12 +1077,12 @@ export default class Webtorrent extends Intersection() {
       figcaption.textContent = fileName
       figureTarget.appendChild(figcaption)
     }
-    return {renderTarget: target, appendTarget, figureTarget}
+    return { renderTarget: target, appendTarget, figureTarget }
   }
 
   /**
    * check if there is a target element with attribute slot, and if so make a clone for this element
-   * 
+   *
    * @static
    * @param {string} tagName
    * @param {HTMLElement} webComponent
@@ -1100,7 +1108,7 @@ export default class Webtorrent extends Intersection() {
     } else {
       target = document.createElement(tagName)
     }
-    return {slot, target}
+    return { slot, target }
   }
 
   static getTagNameByMimeType (type, path) {
@@ -1124,8 +1132,8 @@ export default class Webtorrent extends Intersection() {
             : ['a', 'href']
   }
 
-  static formatBytes(bytes, isPerSecond = false) {
-    if(!bytes) return '0'
+  static formatBytes (bytes, isPerSecond = false) {
+    if (!bytes) return '0'
     const units = isPerSecond
       ? ['bytes/s', 'KB/s', 'MB/s', 'GB/s', 'TB/s']
       : ['bytes', 'KB', 'MB', 'GB', 'TB']
@@ -1138,7 +1146,7 @@ export default class Webtorrent extends Intersection() {
     return `${value?.toFixed(1) || '0'} ${units[i]}`
   }
 
-  static formatTimeRemaining(ms) {
+  static formatTimeRemaining (ms) {
     if (!ms || ms < 0) return '0s'
     const totalSeconds = Math.round(ms / 1000)
     const hours = Math.floor(totalSeconds / 3600)
@@ -1275,7 +1283,8 @@ export default class Webtorrent extends Intersection() {
         this.globalEventTarget.addEventListener('yjs-new-key', this.keysEventListener)
         this.globalEventTarget.addEventListener('yjs-received-key', this.keysEventListener)
         if (!this.requestKeyInnerHTML && this.root.querySelector('[name=request-key]')?.assignedElements()?.[0]?.innerHTML) this.requestKeyInnerHTML = this.root.querySelector('[name=request-key]').assignedElements()[0].innerHTML
-        if (this.requestKeyInnerHTML) this.root.querySelector('[name=request-key]').assignedElements()[0].innerHTML = this.requestKeyInnerHTML.replace('><', /*html*/`
+        if (this.requestKeyInnerHTML) {
+          this.root.querySelector('[name=request-key]').assignedElements()[0].innerHTML = this.requestKeyInnerHTML.replace('><', /* html */`
           >
             <template>${JSON.stringify({
               encrypted: {
@@ -1292,6 +1301,7 @@ export default class Webtorrent extends Intersection() {
             })}</template>
           <
         `)
+        }
       }
     })
   }

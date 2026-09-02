@@ -3,7 +3,6 @@ import '../ipfs/index.min.js'
 import '../ipfs/blockstore-core@7.0.1/dist/index.min.js'
 import '../ipfs/ipfs-unixfs-importer@17.0.1/dist/index.min.js'
 
-
 /* global Environment */
 /* global KuboRpcClient */
 /* global IpfsUnixfsImporter */
@@ -37,7 +36,7 @@ import '../ipfs/ipfs-unixfs-importer@17.0.1/dist/index.min.js'
  * @return {CustomElementConstructor | *}
  */
 export default class Ipfs extends HTMLElement {
-  constructor() {
+  constructor () {
     super()
 
     // set attribute namespace
@@ -46,79 +45,79 @@ export default class Ipfs extends HTMLElement {
     /** @type {GATEWAY[]} */
     this.gateways = this.hasAttribute('preset-gateways')
       ? [
-        {
-          origin: 'https://ipfs.peerweb.site',
-          supports: ['add', 'cat']
-        },
-        {
-          origin: 'https://dcn-web.peerweb.site',
-          supports: ['fetch']
-        },
-        {
-          origin: 'https://ipfs.oversas.org',
-          supports: ['add', 'cat', 'web-seed', 'fetch']
-        },
-        {
-          origin: 'https://ipfs.io',
-          supports: ['web-seed', 'fetch']
-        },
-        {
-          origin: 'https://ipfs.filebase.io',
-          supports: ['web-seed', 'fetch']
-        },
-        {
-          origin: 'https://ipfs.network.thegraph.com',
-          supports: ['add', 'cat', 'fetch']
-        },
-        {
-          origin: 'https://cdn.ipfsscan.io',
-          supports: ['web-seed', 'fetch']
-        },
-        {
-          origin: 'https://ipfs.decentralized-content.com',
-          supports: ['web-seed', 'fetch']
-        },
-        {
-          origin: 'https://dweb.link',
-          supports: ['web-seed', 'fetch']
-        },
-        {
-          origin: 'https://dget.top',
-          supports: ['fetch']
-        },
-        {
-          origin: 'https://gw.ipfs-lens.dev',
-          supports: ['web-seed', 'fetch']
-        },
-        {
-          origin: 'https://api.thegraph.com',
-          supports: ['add', 'cat', 'fetch']
-        },
-        {
-          origin: 'https://gateway.pinata.cloud',
-          supports: ['web-seed', 'fetch']
-        },
-        {
-          origin: 'https://ipfs.effect.ai',
-          supports: ['add', 'web-seed', 'fetch']
-        },
-        {
-          origin: 'https://ipfs.questbook.app',
-          supports: ['add', 'cat']
-        },
-        {
-          origin: 'https://gw-seattle.crustcloud.io:443',
-          supports: ['add', 'cat']
-        }
-      ]
+          {
+            origin: 'https://ipfs.peerweb.site',
+            supports: ['add', 'cat']
+          },
+          {
+            origin: 'https://dcn-web.peerweb.site',
+            supports: ['fetch']
+          },
+          {
+            origin: 'https://ipfs.oversas.org',
+            supports: ['add', 'cat', 'web-seed', 'fetch']
+          },
+          {
+            origin: 'https://ipfs.io',
+            supports: ['web-seed', 'fetch']
+          },
+          {
+            origin: 'https://ipfs.filebase.io',
+            supports: ['web-seed', 'fetch']
+          },
+          {
+            origin: 'https://ipfs.network.thegraph.com',
+            supports: ['add', 'cat', 'fetch']
+          },
+          {
+            origin: 'https://cdn.ipfsscan.io',
+            supports: ['web-seed', 'fetch']
+          },
+          {
+            origin: 'https://ipfs.decentralized-content.com',
+            supports: ['web-seed', 'fetch']
+          },
+          {
+            origin: 'https://dweb.link',
+            supports: ['web-seed', 'fetch']
+          },
+          {
+            origin: 'https://dget.top',
+            supports: ['fetch']
+          },
+          {
+            origin: 'https://gw.ipfs-lens.dev',
+            supports: ['web-seed', 'fetch']
+          },
+          {
+            origin: 'https://api.thegraph.com',
+            supports: ['add', 'cat', 'fetch']
+          },
+          {
+            origin: 'https://gateway.pinata.cloud',
+            supports: ['web-seed', 'fetch']
+          },
+          {
+            origin: 'https://ipfs.effect.ai',
+            supports: ['add', 'web-seed', 'fetch']
+          },
+          {
+            origin: 'https://ipfs.questbook.app',
+            supports: ['add', 'cat']
+          },
+          {
+            origin: 'https://gw-seattle.crustcloud.io:443',
+            supports: ['add', 'cat']
+          }
+        ]
       : []
-      if (this.getAttribute('preset-gateways') && typeof this.getAttribute('preset-gateways') === 'string') {
-        try {
-          // @ts-ignore
-          this.gateways = JSON.parse(this.getAttribute('preset-gateways'))
-        } catch (error) {
-          console.warn('passed preset-gateways are not valid json')
-        }
+    if (this.getAttribute('preset-gateways') && typeof this.getAttribute('preset-gateways') === 'string') {
+      try {
+        // @ts-ignore
+        this.gateways = JSON.parse(this.getAttribute('preset-gateways'))
+      } catch (error) {
+        console.warn('passed preset-gateways are not valid json')
+      }
     }
     // @ts-ignore
     if (Environment?.ipfsGateways) this.gateways = Environment.ipfsGateways.concat(this.gateways)
@@ -190,7 +189,7 @@ export default class Ipfs extends HTMLElement {
       } catch (error) {
         return null
       }
-      this.respond(event.detail.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}catted`, {files: await Promise.all(fileList.filter(entry => entry.type !== 'application/x-bittorrent').map(entry => this.catCidToFile(entry.cid, entry.name, entry.type)))})
+      this.respond(event.detail.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}catted`, { files: await Promise.all(fileList.filter(entry => entry.type !== 'application/x-bittorrent').map(entry => this.catCidToFile(entry.cid, entry.name, entry.type))) })
     }
 
     // client.addAll
@@ -198,11 +197,11 @@ export default class Ipfs extends HTMLElement {
       const addAllFunc = async (inputFiles, torrent) => {
         let cidOne
         // returns the filesCidMetadata cid
-        if (event.detail?.resolveCid) this.respond(event.detail.resolveCid, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {cid: (cidOne = await this.createFileListCid(inputFiles, torrent))})
-        const {error, cid: cidTwo} = await this.addAll(inputFiles, torrent)
+        if (event.detail?.resolveCid) this.respond(event.detail.resolveCid, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, { cid: (cidOne = await this.createFileListCid(inputFiles, torrent)) })
+        const { error, cid: cidTwo } = await this.addAll(inputFiles, torrent)
         // adds and returns the filesCidMetadata cid
-        this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, {cid: cidTwo, error})
-        if (cidOne && cidTwo && cidOne !== cidTwo) console.warn('Error while creating cids', {cidOne, cidTwo})
+        this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, { cid: cidTwo, error })
+        if (cidOne && cidTwo && cidOne !== cidTwo) console.warn('Error while creating cids', { cidOne, cidTwo })
       }
       // preferred to consume the files directly from File Input but must be sorted analog controller/Webtorrent.js client.seed L: 282, sometimes the torrent.files made trouble to stream, which resulted in some Readable Stream error
       const files = event.detail.input ? Array.from(event.detail.input).sort((a, b) => a.name.localeCompare(b.name)) : event.detail.torrent.files
@@ -211,7 +210,7 @@ export default class Ipfs extends HTMLElement {
       event.detail.torrent.on('ready', () => addAllFunc(files, event.detail.torrent))
     }
 
-    this.ipfsGetTorrentFileEventListener = async event => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}torrent-file`, {cid: event.detail.cid, torrentFile: await this.getTorrentFile(event.detail.cid)})
+    this.ipfsGetTorrentFileEventListener = async event => this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}torrent-file`, { cid: event.detail.cid, torrentFile: await this.getTorrentFile(event.detail.cid) })
 
     this.onlineEventListener = event => {
       this.gateways.forEach(gateway => {
@@ -276,7 +275,7 @@ export default class Ipfs extends HTMLElement {
 
   /**
    * Bundles all the files cid's, torrent.files metadata and torrentFile itself into one JSON called filesCidMetadata and returns it's cid
-   * 
+   *
    * @param {FileList} inputFiles
    * @param {any} torrent
    * @returns {Promise<{cid: string, error?: Error}>} // returns the filesCidMetadata cid
@@ -299,10 +298,10 @@ export default class Ipfs extends HTMLElement {
         cancelable: true,
         composed: true
       }))
-      if (filesCidMetadata.some(data => !data.cid || data.cid === 'error')) return {cid: 'error', error: foundErrorData.error}
+      if (filesCidMetadata.some(data => !data.cid || data.cid === 'error')) return { cid: 'error', error: foundErrorData.error }
     }
     let fileListJsonFile
-    const {cid, error} = await this.add(fileListJsonFile = Ipfs.createFileListJsonFile(filesCidMetadata)).result
+    const { cid, error } = await this.add(fileListJsonFile = Ipfs.createFileListJsonFile(filesCidMetadata)).result
     if (error) {
       this.dispatchEvent(new CustomEvent(`${this.namespace}error-${torrent.infoHash}`, {
         detail: {
@@ -315,14 +314,14 @@ export default class Ipfs extends HTMLElement {
         cancelable: true,
         composed: true
       }))
-      if (!cid || cid === 'error') return {cid: 'error', error}
+      if (!cid || cid === 'error') return { cid: 'error', error }
     }
-    return {cid: cid.toString(), error}
+    return { cid: cid.toString(), error }
   }
 
   /**
    * Creates cid for fileList
-   * 
+   *
    * @param {FileList} inputFiles
    * @param {any} torrent
    * @returns {Promise<string>}
@@ -347,7 +346,7 @@ export default class Ipfs extends HTMLElement {
 
   /**
    * Creates cid for fileList
-   * 
+   *
    * @param {FileList} inputFiles
    * @param {any} torrent
    * @returns {Promise<{cid: string, name: string | 'torrent', type: string | 'application/x-bittorrent', size?: number, offset?: number, length?: number}[]>}
@@ -361,9 +360,9 @@ export default class Ipfs extends HTMLElement {
       for await (const result of IpfsUnixfsImporter.importer([
         file instanceof File
           ? {
-            path: file.name,
-            content: file
-          }
+              path: file.name,
+              content: file
+            }
           : file
       ], blockstore, {
         cidVersion: this.cidVersion,
@@ -380,7 +379,7 @@ export default class Ipfs extends HTMLElement {
 
   /**
    * Instead of a folder, we create a list of all files plus torrent and put it into an array
-   * 
+   *
    * @param {FileList} inputFiles
    * @param {any} torrent
    * @returns {{path: string, content: ReadableStream}[]}
@@ -404,7 +403,7 @@ export default class Ipfs extends HTMLElement {
 
   /**
    * Instead of a folder, we create a list of all files plus torrent and put it into an array
-   * 
+   *
    * @param {FileList} inputFiles
    * @param {any} torrent
    * @param {{cid: string, error?: Error}} result
@@ -423,18 +422,18 @@ export default class Ipfs extends HTMLElement {
         }
       : inputFiles[counter]
         ? {
-          cid: result.cid.toString(),
-          //lastModified: inputFiles[counter].lastModified, // avoid this, otherwise the cid is always going to change
-          name: inputFiles[counter].name,
-          type: inputFiles[counter].type,
-          offset: torrent.files[counter]?.offset,
-          length: torrent.files[counter]?.length
-        }
+            cid: result.cid.toString(),
+            // lastModified: inputFiles[counter].lastModified, // avoid this, otherwise the cid is always going to change
+            name: inputFiles[counter].name,
+            type: inputFiles[counter].type,
+            offset: torrent.files[counter]?.offset,
+            length: torrent.files[counter]?.length
+          }
         : {
-          cid: result.cid.toString(),
-          name: 'torrent',
-          type: 'application/x-bittorrent'
-        }
+            cid: result.cid.toString(),
+            name: 'torrent',
+            type: 'application/x-bittorrent'
+          }
   }
 
   static createFileListJsonFile (data) {
@@ -447,7 +446,7 @@ export default class Ipfs extends HTMLElement {
 
   /**
    * first get fileList.json then find torrent cid, download the torrent file and return
-   * 
+   *
    * @param {string} cid
    * @returns {Promise<File | null>}
    */
@@ -466,7 +465,7 @@ export default class Ipfs extends HTMLElement {
 
   /**
    * client.cat file from ipfs to text
-   * 
+   *
    * @param {string} cid
    * @param {boolean} [isJson=false]
    * @returns {Promise<string|null>}
@@ -490,9 +489,9 @@ export default class Ipfs extends HTMLElement {
           }
         }
       }
-      let {result: catChunksPromise, getAbortController: catGetAbortController} = this.cat(cid)
-      let {result: fetchResponsePromise, getAbortController: fetchGetAbortController} = this.fetch(cid)
-      catChunksPromise.then(({chunks, gateway, isAbortError}) => {
+      const { result: catChunksPromise, getAbortController: catGetAbortController } = this.cat(cid)
+      const { result: fetchResponsePromise, getAbortController: fetchGetAbortController } = this.fetch(cid)
+      catChunksPromise.then(({ chunks, gateway, isAbortError }) => {
         const doResolveNull = () => {
           if (!isAbortError && gateway) {
             this.setGatewayError(gateway, 'hasError', true)
@@ -511,7 +510,7 @@ export default class Ipfs extends HTMLElement {
         fetchGetAbortController().abort()
         doResolve(text)
       })
-      fetchResponsePromise.then(async ({response, gateway, isAbortError}) => {
+      fetchResponsePromise.then(async ({ response, gateway, isAbortError }) => {
         const doResolveNull = () => {
           if (!isAbortError && gateway) {
             this.setGatewayError(gateway, 'hasError', true)
@@ -535,7 +534,7 @@ export default class Ipfs extends HTMLElement {
 
   /**
    * client.cat file from ipfs to file
-   * 
+   *
    * @param {string} cid
    * @param {string} name
    * @param {string} type
@@ -547,7 +546,7 @@ export default class Ipfs extends HTMLElement {
       chunks,
       name,
       {
-        type: type
+        type
       }
     )
     return new Promise(resolve => {
@@ -565,9 +564,9 @@ export default class Ipfs extends HTMLElement {
           }
         }
       }
-      let {result: catChunksPromise, getAbortController: catGetAbortController} = this.cat(cid)
-      let {result: fetchResponsePromise, getAbortController: fetchGetAbortController} = this.fetch(cid)
-      catChunksPromise.then(({chunks, gateway, isAbortError}) => {
+      const { result: catChunksPromise, getAbortController: catGetAbortController } = this.cat(cid)
+      const { result: fetchResponsePromise, getAbortController: fetchGetAbortController } = this.fetch(cid)
+      catChunksPromise.then(({ chunks, gateway, isAbortError }) => {
         const doResolveNull = () => {
           if (!isAbortError && gateway) {
             this.setGatewayError(gateway, 'hasError', true)
@@ -578,7 +577,7 @@ export default class Ipfs extends HTMLElement {
         fetchGetAbortController().abort()
         doResolve(getFile(chunks, name, type))
       })
-      fetchResponsePromise.then(async ({response, gateway, isAbortError}) => {
+      fetchResponsePromise.then(async ({ response, gateway, isAbortError }) => {
         const doResolveNull = () => {
           if (!isAbortError && gateway) {
             this.setGatewayError(gateway, 'hasError', true)
@@ -594,7 +593,7 @@ export default class Ipfs extends HTMLElement {
 
   /**
    * Check if already catting else forward to _cat
-   * 
+   *
    * @param {string} cid
    * @returns {{result: Promise<{chunks: any[]|null, gateway:GATEWAY|null, isAbortError?:boolean}>, getAbortController: () => AbortController}}
    */
@@ -608,7 +607,7 @@ export default class Ipfs extends HTMLElement {
 
   /**
    * cat resp. download through ipfs client
-   * 
+   *
    * @param {string} cid
    * @returns {{result: Promise<{chunks: any[]|null, gateway:GATEWAY|null, isAbortError?:boolean}>, getAbortController: () => AbortController}}
    */
@@ -620,14 +619,14 @@ export default class Ipfs extends HTMLElement {
         const client = gatewayResult.gateway.client
         try {
           const chunks = []
-          for await (const chunk of client.cat(cid, {signal: abortController.signal})) {
+          for await (const chunk of client.cat(cid, { signal: abortController.signal })) {
             chunks.push(chunk)
           }
           this.setGatewayError(gatewayResult.gateway, 'hasError', false)
-          return {chunks, gateway: gatewayResult.gateway}
+          return { chunks, gateway: gatewayResult.gateway }
         } catch (error) {
           if (error.name === 'AbortError') {
-            return {chunks: null, gateway: gatewayResult.gateway, isAbortError: true}
+            return { chunks: null, gateway: gatewayResult.gateway, isAbortError: true }
           } else {
             this.setGatewayError(gatewayResult.gateway, 'hasError', true)
             if (!gatewayResult.ignoreError) {
@@ -635,21 +634,21 @@ export default class Ipfs extends HTMLElement {
               abortController = catResult.getAbortController()
               return catResult.result
             } else {
-              return {chunks: null, gateway: gatewayResult.gateway}
+              return { chunks: null, gateway: gatewayResult.gateway }
             }
           }
         }
       } else {
         console.warn('No more viable gateways...', this.gateways)
-        return {chunks: null, gateway: null}
+        return { chunks: null, gateway: null }
       }
     }
-    return {result: this.resolveWhenOnline(func), getAbortController: () => abortController}
+    return { result: this.resolveWhenOnline(func), getAbortController: () => abortController }
   }
 
   /**
    * Check if already fetching else forward to _fetch
-   * 
+   *
    * @param {string} cid
    * @returns {{result: Promise<{response: Response|null, gateway:GATEWAY|null, isAbortError?:boolean}>, getAbortController: () => AbortController}}
    */
@@ -663,7 +662,7 @@ export default class Ipfs extends HTMLElement {
 
   /**
    * fetch resp. download through ipfs client
-   * 
+   *
    * @param {string} cid
    * @returns {{result: Promise<{response: Response|null, gateway:GATEWAY|null, isAbortError?:boolean}>, getAbortController: () => AbortController}}
    */
@@ -672,13 +671,13 @@ export default class Ipfs extends HTMLElement {
     const func = () => {
       const gatewayResult = this.getGateway('fetch')
       if (gatewayResult.gateway) {
-        return fetch(`${gatewayResult.gateway.origin}/ipfs/${cid}`, {signal: abortController.signal}).then(response => {
+        return fetch(`${gatewayResult.gateway.origin}/ipfs/${cid}`, { signal: abortController.signal }).then(response => {
           this.setGatewayError(gatewayResult.gateway, 'hasError', false)
-          return {response, gateway: gatewayResult.gateway}
+          return { response, gateway: gatewayResult.gateway }
           // @ts-ignore
         }).catch(error => {
           if (error.name === 'AbortError') {
-            return {response: null, gateway: gatewayResult.gateway, isAbortError: true}
+            return { response: null, gateway: gatewayResult.gateway, isAbortError: true }
           } else {
             this.setGatewayError(gatewayResult.gateway, 'hasError', true)
             if (!gatewayResult.ignoreError) {
@@ -686,21 +685,21 @@ export default class Ipfs extends HTMLElement {
               abortController = fetchResult.getAbortController()
               return fetchResult.result
             } else {
-              return {response: null, gateway: gatewayResult.gateway}
+              return { response: null, gateway: gatewayResult.gateway }
             }
           }
         })
       } else {
         console.warn('No more viable gateways...', this.gateways)
-        return Promise.resolve({response: null, gateway: null})
+        return Promise.resolve({ response: null, gateway: null })
       }
     }
-    return {result: this.resolveWhenOnline(func), getAbortController: () => abortController}
+    return { result: this.resolveWhenOnline(func), getAbortController: () => abortController }
   }
 
   /**
    * Check if already adding else forward to _add
-   * 
+   *
    * @method
    * @name add
    * @kind method
@@ -721,7 +720,7 @@ export default class Ipfs extends HTMLElement {
 
   /**
    * Add to IPFS
-   * 
+   *
    * @method
    * @name add
    * @kind method
@@ -741,11 +740,11 @@ export default class Ipfs extends HTMLElement {
         for await (const result of IpfsUnixfsImporter.importer([
           file instanceof File
             ? {
-              path: file.name,
-              content: file
-            }
+                path: file.name,
+                content: file
+              }
             : file
-          ], blockstore, {
+        ], blockstore, {
           cidVersion: this.cidVersion,
           rawLeaves: this.rawLeaves,
           wrapWithDirectory: false
@@ -767,7 +766,7 @@ export default class Ipfs extends HTMLElement {
                 file,
                 torrent,
                 bytesUploaded: 0,
-                gateway: gatewayResult.gateway,
+                gateway: gatewayResult.gateway
               },
               bubbles: true,
               cancelable: true,
@@ -782,21 +781,21 @@ export default class Ipfs extends HTMLElement {
             timeout: this.generalRequestTimeout,
             progress: torrent
               ? (...args) => {
-                torrent.ipfsStatus = 'progress'
-                this.dispatchEvent(new CustomEvent(`${this.namespace}progress-${torrent.infoHash}`, {
-                  detail: {
-                    status: torrent.ipfsStatus,
-                    file,
-                    torrent,
-                    bytesUploaded: args[0],
-                    path: args[1],
-                    gateway: gatewayResult.gateway,
-                  },
-                  bubbles: true,
-                  cancelable: true,
-                  composed: true
-                }))
-              }
+                  torrent.ipfsStatus = 'progress'
+                  this.dispatchEvent(new CustomEvent(`${this.namespace}progress-${torrent.infoHash}`, {
+                    detail: {
+                      status: torrent.ipfsStatus,
+                      file,
+                      torrent,
+                      bytesUploaded: args[0],
+                      path: args[1],
+                      gateway: gatewayResult.gateway
+                    },
+                    bubbles: true,
+                    cancelable: true,
+                    composed: true
+                  }))
+                }
               : null
           })
           if (torrent) {
@@ -806,7 +805,7 @@ export default class Ipfs extends HTMLElement {
                 status: torrent.ipfsStatus,
                 file,
                 torrent,
-                gateway: gatewayResult.gateway,
+                gateway: gatewayResult.gateway
               },
               bubbles: true,
               cancelable: true,
@@ -824,7 +823,7 @@ export default class Ipfs extends HTMLElement {
                 file,
                 torrent,
                 error,
-                gateway: gatewayResult.gateway,
+                gateway: gatewayResult.gateway
               },
               bubbles: true,
               cancelable: true,
@@ -832,7 +831,7 @@ export default class Ipfs extends HTMLElement {
             }))
           }
           if (error.name === 'AbortError') {
-            return {...createFileCid(file), error}
+            return { ...createFileCid(file), error }
           } else {
             this.setGatewayError(gatewayResult.gateway, 'hasAddError', true)
             if (!gatewayResult.ignoreError) {
@@ -841,21 +840,21 @@ export default class Ipfs extends HTMLElement {
               return addResult.result
             } else {
               console.warn('Failed to add...', error, file)
-              return {...createFileCid(file), error}
+              return { ...createFileCid(file), error }
             }
           }
         }
       } else {
         console.warn('No more viable gateways...', this.gateways)
-        return {...createFileCid(file), error: new Error('No more viable gateways...')}
+        return { ...createFileCid(file), error: new Error('No more viable gateways...') }
       }
     }
-    return {result: this.resolveWhenOnline(func), getAbortController: () => abortController}
+    return { result: this.resolveWhenOnline(func), getAbortController: () => abortController }
   }
 
   /**
    * Create a KuboRpcClient
-   * 
+   *
    * @param {'add'|'cat'|'web-seed'|'fetch'} usage
    * @param {boolean} [ignoreError=false]
    * @returns {{gateway: GATEWAY | null, ignoreError: boolean}}
@@ -865,11 +864,13 @@ export default class Ipfs extends HTMLElement {
     const findGatewayFunc = gateway => {
       if (!gateway.supports.includes(usage)) return false
       // KuboRpcClient is only used for add and cat
-      // @ts-ignore
-      if (!gateway.client && ['add', 'cat'].includes(usage)) gateway.client = KuboRpcClient.create({
-        url: `${gateway.origin}${this.clientRpcVersion}`,
-        timeout: this.generalRequestTimeout
-      })
+      if (!gateway.client && ['add', 'cat'].includes(usage)) {
+        // @ts-ignore
+        gateway.client = KuboRpcClient.create({
+          url: `${gateway.origin}${this.clientRpcVersion}`,
+          timeout: this.generalRequestTimeout
+        })
+      }
       return true
     }
     let gateway = gatewaysFiltered.find(findGatewayFunc)
@@ -885,9 +886,9 @@ export default class Ipfs extends HTMLElement {
       }, 1000) // cool down 1 sec. before resetting
     }
     return gateway
-      ? {gateway, ignoreError}
+      ? { gateway, ignoreError }
       : ignoreError
-        ? {gateway: null, ignoreError}
+        ? { gateway: null, ignoreError }
         : this.getGateway(usage, true)
   }
 
@@ -929,7 +930,7 @@ export default class Ipfs extends HTMLElement {
   /**
    * Executes a function as soon as only
    * TODO: NOTE: this triggered a freeze after returning to navigator.onLine when all fires from the queue and getGateway does reset too quick. trying now with: this.resetGatewaysTimeoutId
-   * 
+   *
    * @param {()=>any} func
    * @returns {Promise<any>}
    */
@@ -937,7 +938,7 @@ export default class Ipfs extends HTMLElement {
     let resolveFunc = resolve => resolve
     const promise = new Promise(resolve => (resolveFunc = resolve))
     if (navigator.onLine) resolveFunc(func())
-    self.addEventListener('online', () => resolveFunc(func()), {once: true})
+    self.addEventListener('online', () => resolveFunc(func()), { once: true })
     return promise
   }
 
