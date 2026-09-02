@@ -1,7 +1,4 @@
-/* global self */
-/* global clients */
-
-const IpfsServiceWorker = (ChosenExtend = class {}) => class IpfsServiceWorker extends ChosenExtend {
+const IpfsServiceWorker = (ChosenExtend = class {}) => class IpfsServiceWorker extends ChosenExtend { // eslint-disable-line
   // stitch a response together from multiple files and ranges
   static webSeedRespondWith (event, request) {
     if (!request.url.includes('/webtorrent-web-seed/')) return false
@@ -50,7 +47,8 @@ const IpfsServiceWorker = (ChosenExtend = class {}) => class IpfsServiceWorker e
         end,
         total: file.length - 1
       }],
-      rangeTotal: file.length - 1 /* -1 because it starts at 0 */ }
+      rangeTotal: file.length - 1 /* -1 because it starts at 0 */
+    }
   }
   /*
   // the below chooses by range and not by fileName, not sure if this works with some bep definitions, but can be deleted if not needed

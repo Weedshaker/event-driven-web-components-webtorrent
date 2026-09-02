@@ -1,8 +1,10 @@
 // @ts-check
-import { default as WebTorrentConstructor } from '../webtorrent/dist/webtorrent.min.js'
+import { default as WebTorrentConstructor } from '../webtorrent/dist/webtorrent.min.js' // eslint-disable-line
 import { WebWorker } from '../event-driven-web-components-prototypes/src/WebWorker.js'
 
 /* global Environment */
+/* global location */
+/* global self */
 
 /**
  * @typedef {{
@@ -183,7 +185,7 @@ export default class Webtorrent extends WebWorker() {
           ...trackers
         ])),
         ...presetAddOpts
-      })).catch(error => ({ announce: presetTrackers, ...presetAddOpts }))
+      })).catch(error => ({ announce: presetTrackers, ...presetAddOpts })) // eslint-disable-line
     } else {
       this.addOpts = Promise.resolve({ announce: presetTrackers, ...presetAddOpts })
     }
@@ -940,7 +942,7 @@ export default class Webtorrent extends WebWorker() {
       return readJson(await torrentsDir.getFileHandle(infoHash, { create: true }))
     } else {
       const torrentContainers = []
-      for await (const [name, fileHandle] of torrentsDir.entries()) {
+      for await (const [name, fileHandle] of torrentsDir.entries()) { // eslint-disable-line
         if (fileHandle.kind !== 'file') continue
         torrentContainers.push(readJson(fileHandle))
       }

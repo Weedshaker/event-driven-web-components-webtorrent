@@ -1,6 +1,9 @@
 // @ts-check
 import { Intersection } from '../event-driven-web-components-prototypes/src/Intersection.js'
 
+/* global location */
+/* global self */
+
 /**
  * errorCounter starts with 0 + 1 normal reload of html nodes, 2 + 3 reset torrent, 4 render to link instead of video/img/audio and then starts from 0 again.
  @typedef {0|1|2|3|4|number} ErrorCounter
@@ -169,7 +172,7 @@ export default class Webtorrent extends Intersection() {
         event.stopPropagation()
       }
       let assignedElement
-      if (assignedElement = this.resetLink.children[0]?.assignedElements()?.[0]) {
+      if ((assignedElement = this.resetLink.children[0]?.assignedElements()?.[0])) {
         assignedElement.addEventListener('transitionend', event => assignedElement.removeAttribute('rotate'), { once: true })
         assignedElement.setAttribute('rotate', '360deg')
       }
@@ -861,7 +864,7 @@ export default class Webtorrent extends Intersection() {
               loadedEventListener()
               if (!this.hasAttribute('no-media-resume')) {
                 let mediaResumeItem
-                if (mediaResumeItem = this.mediaResumeMap.get(torrent.name)) {
+                if ((mediaResumeItem = this.mediaResumeMap.get(torrent.name))) {
                   // must have at least 5 seconds to continue replay
                   if ((mediaResumeItem.currentTime + 5) < renderTarget.duration) renderTarget.currentTime = mediaResumeItem.currentTime
                   // resume only if it was playing in less than the this.mediaResumeMaxTimeout before
@@ -926,13 +929,13 @@ export default class Webtorrent extends Intersection() {
     // check if file is encrypted and if so, get the ReadableStream of stream decrypt
     let keyContainer, iv
     if ((iv = this.iv)) {
-      if (keyContainer = await this.keyContainer) {
+      if ((keyContainer = await this.keyContainer)) {
         file.on('iterator', ({ iterator, file, req }, cb) => {
           this.wasStreaming = true
           // decrypt on each iteration the requested chunks
           cb((async function * () {
             const [, start, end] = (/bytes=(\d+)-(\d*)/.exec(req?.headers?.range) || []).map(num => Number(num))
-            const decryptedStream = await new Promise(async resolve => webComponent.dispatchEvent(new CustomEvent('yjs-decrypt', {
+            const decryptedStream = await new Promise(async resolve => webComponent.dispatchEvent(new CustomEvent('yjs-decrypt', { // eslint-disable-line
               detail: {
                 resolve,
                 encrypted: {
@@ -1017,7 +1020,7 @@ export default class Webtorrent extends Intersection() {
   async getBlob (file, keyContainer) {
     try {
       if (keyContainer) {
-        const decryptedStream = await new Promise(async resolve => this.dispatchEvent(new CustomEvent('yjs-decrypt', {
+        const decryptedStream = await new Promise(async resolve => this.dispatchEvent(new CustomEvent('yjs-decrypt', { // eslint-disable-line
           detail: {
             resolve,
             encrypted: {
@@ -1267,7 +1270,7 @@ export default class Webtorrent extends Intersection() {
     this._keyContainer.then(keyContainer => {
       if (keyContainer) {
         let assignedElement
-        if (assignedElement = this.keyIcon.assignedElements()?.[0]) {
+        if ((assignedElement = this.keyIcon.assignedElements()?.[0])) {
           // reset the key element with all the attributes already set plus key epoch and public-name
           const replacement = document.createElement(assignedElement.tagName)
           Array.from(assignedElement.attributes).forEach(attribute => replacement.setAttribute(attribute.name, attribute.value))

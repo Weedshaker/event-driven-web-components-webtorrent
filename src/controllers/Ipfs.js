@@ -7,6 +7,8 @@ import '../ipfs/ipfs-unixfs-importer@17.0.1/dist/index.min.js'
 /* global KuboRpcClient */
 /* global IpfsUnixfsImporter */
 /* global BlockstoreCore */
+/* global HTMLElement */
+/* global self */
 
 /**
  * @typedef {{
