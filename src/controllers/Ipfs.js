@@ -174,7 +174,7 @@ export default class Ipfs extends HTMLElement {
           const filesCidMetadata = await this.createFileListCidMetadata(event.detail.torrent.files, event.detail.torrent)
           addWebSeedFunc(event.detail.torrent, filterFileMetadata(filesCidMetadata))
           // add the filesCidMetadata to IPFS
-          this.add(Ipfs.createFileListJsonFile(filesCidMetadata))
+          this.add(Ipfs.createFileListJsonFile(filesCidMetadata), event.detail.torrent)
         }
         if (event.detail.torrent.metadata) return doOnMetadata()
         return event.detail.torrent.on('metadata', doOnMetadata)
@@ -199,10 +199,12 @@ export default class Ipfs extends HTMLElement {
       const addAllFunc = async (inputFiles, torrent) => {
         let cidOne
         // returns the filesCidMetadata cid
-        if (event.detail?.resolveCid) this.respond(event.detail.resolveCid, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, { cid: (cidOne = await this.createFileListCid(inputFiles, torrent)) })
+        if (event.detail?.resolveCid) this.respond(event.detail.resolveCid, event.detail?.dispatchCid, event.detail?.name || `${this.namespace}seeded`, { cid: (cidOne = await this.createFileListCid(inputFiles, torrent)) })
         const { error, cid: cidTwo } = await this.addAll(inputFiles, torrent)
         // adds and returns the filesCidMetadata cid
-        this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, { cid: cidTwo, error })
+        const status = error ? 'error' : 'done'
+        torrent.ipfsStatus = status
+        this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}seeded`, { cid: cidTwo, torrent: event.detail.torrent, error, status })
         if (cidOne && cidTwo && cidOne !== cidTwo) console.warn('Error while creating cids', { cidOne, cidTwo })
       }
       // preferred to consume the files directly from File Input but must be sorted analog controller/Webtorrent.js client.seed L: 282, sometimes the torrent.files made trouble to stream, which resulted in some Readable Stream error
@@ -290,6 +292,7 @@ export default class Ipfs extends HTMLElement {
     }))
     let foundErrorData
     if ((foundErrorData = filesCidMetadata.find(data => data.error))) {
+      if (torrent) torrent.ipfsStatus = 'error'
       this.dispatchEvent(new CustomEvent(`${this.namespace}error-${torrent.infoHash}`, {
         detail: {
           status: 'error',
@@ -303,8 +306,9 @@ export default class Ipfs extends HTMLElement {
       if (filesCidMetadata.some(data => !data.cid || data.cid === 'error')) return { cid: 'error', error: foundErrorData.error }
     }
     let fileListJsonFile
-    const { cid, error } = await this.add(fileListJsonFile = Ipfs.createFileListJsonFile(filesCidMetadata)).result
+    const { cid, error } = await this.add(fileListJsonFile = Ipfs.createFileListJsonFile(filesCidMetadata), torrent).result
     if (error) {
+      if (torrent) torrent.ipfsStatus = 'error'
       this.dispatchEvent(new CustomEvent(`${this.namespace}error-${torrent.infoHash}`, {
         detail: {
           status: 'error',
@@ -707,12 +711,12 @@ export default class Ipfs extends HTMLElement {
    * @kind method
    * @memberof Ipfs
    * @param {{path: string, content: ReadableStream}|File} file
-   * @param {any} [torrent=null]
+   * @param {any} torrent
    * @returns {{result: Promise<{cid: string, error?: Error}>, getAbortController: () => AbortController}}
    */
-  add (file, torrent = null) {
+  add (file, torrent) {
     // @ts-ignore
-    const key = file.name || file.path
+    const key = `${torrent.infoHash}-${file.name || file.path || torrent.name || 'none'}`
     if (this.addProgressMap.has(key)) return this.addProgressMap.get(key)
     const addResult = this._add(file, torrent)
     this.addProgressMap.set(key, addResult)
@@ -728,10 +732,10 @@ export default class Ipfs extends HTMLElement {
    * @kind method
    * @memberof Ipfs
    * @param {{path: string, content: ReadableStream}|File} file
-   * @param {any} [torrent=null]
+   * @param {any} torrent
    * @returns {{result: Promise<{cid: string, error?: Error}>, getAbortController: () => AbortController}}
    */
-  _add (file, torrent = null) {
+  _add (file, torrent) {
     let abortController = new AbortController()
     const func = async () => {
       const createFileCid = async file => {
