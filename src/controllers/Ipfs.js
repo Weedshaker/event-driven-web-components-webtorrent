@@ -524,7 +524,7 @@ export default class Ipfs extends HTMLElement {
           return doResolve(null)
         }
         if (!response) return doResolveNull()
-        const text = await response.text()
+        const text = await response.clone().text()
         if (isJson) {
           try {
             JSON.parse(text)
@@ -592,7 +592,7 @@ export default class Ipfs extends HTMLElement {
         }
         if (!response) return doResolveNull()
         catGetAbortController().abort()
-        doResolve(getFile([await response.blob()], name, type))
+        doResolve(getFile([await response.clone().blob()], name, type))
       })
     })
   }

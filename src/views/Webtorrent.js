@@ -262,7 +262,7 @@ export default class Webtorrent extends Intersection() {
         : event.detail.status
       clearTimeout(this.ipfsStatusTimeout)
       if (status === 'done') {
-        this.ipfsDoneCounter++
+        if (event.detail.activity !== false) this.ipfsDoneCounter++
         if (this.ipfsDoneCounter < (event.detail.torrent.files.length + 2)) status = 'progress'
       }
       const fileName = event.detail.file?.name || event.detail.file?.path || event.detail.torrent.name || ''
@@ -280,7 +280,7 @@ export default class Webtorrent extends Intersection() {
           }
           if (event.detail.gateway?.origin) ipfsProgressMap.set(event.detail.gateway.origin, bytesUploaded)
           this.ipfsStatusEl.textContent = `Uploading ${this.ipfsFileNames.has('progress') ? `${this.ipfsFileNames.get('progress')} ` : ''}to ${event.detail.gateway?.origin || 'ipfs'}`
-          this.ipfsProgressEl.textContent = `${(bytesUploaded / event.detail.torrent.length * 100).toFixed(1)}%`
+          this.ipfsProgressEl.textContent = bytesUploaded ? `${(bytesUploaded / event.detail.torrent.length * 100).toFixed(1)}%` : ''
           this.ipfsUploadedEl.textContent = Webtorrent.formatBytes(bytesUploaded)
           this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
           this.ipfsStatusTimeout = setTimeout(() => this.details.setAttribute('open', ''), 1000)
