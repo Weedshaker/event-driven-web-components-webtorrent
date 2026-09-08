@@ -682,7 +682,7 @@ export default class Webtorrent extends Intersection() {
           <hr>
           <div class="info-title">ipfs add:</div>
           <div id=progress-info>
-            <div id=ipfs-status>No information...</div>
+            <div id=ipfs-status>Upload initializing...</div>
             <div id=ipfs-progress></div>
             <div class=pair>
               <div id=ipfs-uploaded></div>
@@ -726,12 +726,6 @@ export default class Webtorrent extends Intersection() {
     this.webtorrentTargetElements = []
     this.clonedElements.forEach(element => element.remove())
     this.progressBar.innerHTML = ''
-    this.ipfsDoneCounter = 0
-    this.ipfsStatusEl.textContent = 'No information...'
-    this.ipfsProgressEl.textContent = ''
-    this.ipfsUploadedEl.textContent = ''
-    this.ipfsLengthEl.textContent = ''
-    this.ipfsFileNames = new Map()
     this.resetLink.children[0]?.assignedElements()?.[0].removeAttribute('rotate')
     // set new elements
     const { appendTarget: progressTarget, renderTarget: progressElement } = Webtorrent.getElement(this, 'progress', 'initializing...', 'progress', false)
@@ -769,7 +763,6 @@ export default class Webtorrent extends Intersection() {
         return
       } else {
         this.torrent = torrent
-        this.torrent.ipfsStatus = ''
         this.setAttribute('has-torrent', '')
         this.removeAttribute('deleted')
         this.removeAttribute('deleting')
