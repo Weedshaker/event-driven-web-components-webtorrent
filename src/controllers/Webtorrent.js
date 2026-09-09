@@ -372,7 +372,8 @@ export default class Webtorrent extends WebWorker() {
         if (event.detail.torrent?.done && (addSeedResult = await Webtorrent.#torrentMap.get(event.detail.torrent.infoHash)) && addSeedResult.cid) {
           this.dispatchEvent(new CustomEvent('ipfs-seed', {
             detail: {
-              torrent: event.detail.torrent
+              torrent: event.detail.torrent,
+              cid: addSeedResult.cid
             },
             bubbles: true,
             cancelable: true,
@@ -763,7 +764,8 @@ export default class Webtorrent extends WebWorker() {
       if (cid && !torrent.paused) {
         this.dispatchEvent(new CustomEvent('ipfs-seed', {
           detail: {
-            torrent
+            torrent,
+            cid
           },
           bubbles: true,
           cancelable: true,

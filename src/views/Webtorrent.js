@@ -31,6 +31,7 @@ export default class Webtorrent extends Intersection() {
     if (this.keyEpoch) this.setAttribute('has-key', '')
     this.iv = torrentIdUrl.searchParams.get('iv')
     this.fileName = torrentIdUrl.searchParams.get('dn')
+    if (torrentIdUrl.searchParams.get('cid')) this.setAttribute('has-cid', '')
     let xt
     if ((xt = torrentIdUrl.searchParams.get('xt'))) this.infoHash = xt.replace('urn:btih:', '').toLowerCase()
     /** @type {{renderTarget, appendTarget, figureTarget, file, tagName}[]} */
@@ -554,6 +555,15 @@ export default class Webtorrent extends Intersection() {
         gap: 0.5em;
         justify-content: end;
       }
+      :host > details [cid], :host > details > #content > #progress-info[cid] {
+        display: none;
+      }
+      :host([has-cid]) > details [cid] {
+        display: block;
+      }
+      :host([has-cid]) > details > #content > #progress-info[cid] {
+        display: flex;
+      }
       :host > details > #content > #progress-info {
         flex-wrap: wrap;
         justify-content: space-between;
@@ -679,9 +689,9 @@ export default class Webtorrent extends Intersection() {
             </div>
             <div id=torrent-time-remaining></div>
           </div>
-          <hr>
-          <div class="info-title">ipfs add:</div>
-          <div id=progress-info>
+          <hr cid>
+          <div cid class="info-title">ipfs add:</div>
+          <div id=progress-info cid>
             <div id=ipfs-status>Upload initializing...</div>
             <div id=ipfs-progress></div>
             <div class=pair>
