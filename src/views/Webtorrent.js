@@ -570,6 +570,9 @@ export default class Webtorrent extends Intersection() {
         gap: 0 1em;
         column-rule: 1px dotted currentColor;
       }
+      :host > details > #content > #progress-info > * {
+        max-width: 100%;
+      }
       :host > details .pair {
         display: flex;
         flex-wrap: nowrap;
