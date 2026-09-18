@@ -199,7 +199,8 @@ export default class Ipfs extends HTMLElement {
       const addAllFunc = async (inputFiles, torrent) => {
         let cidOne
         // returns the filesCidMetadata cid
-        if (event.detail?.resolveCid) this.respond(event.detail.resolveCid, event.detail?.dispatchCid, event.detail?.name || `${this.namespace}seeded`, { cid: (cidOne = await this.createFileListCid(inputFiles, torrent)) })
+        if (event.detail?.resolveCid) this.respond(event.detail.resolveCid, event.detail?.dispatchCid, event.detail?.name || `${this.namespace}cid-seeded`, { cid: (cidOne = await this.createFileListCid(inputFiles, torrent)) })
+        if (event.detail?.noUpload) return this.respond(event.detail.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}cid-seeded`, { cid: cidOne })
         const { error, cid: cidTwo } = await this.addAll(inputFiles, torrent)
         // adds and returns the filesCidMetadata cid
         const status = error ? 'error' : 'done'

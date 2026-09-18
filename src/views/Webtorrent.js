@@ -293,6 +293,9 @@ export default class Webtorrent extends Intersection() {
           this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
           this.ipfsStatusTimeout = setTimeout(() => this.details.removeAttribute('open'), 1000)
           break
+        case 'not-seeding':
+          this.ipfsStatusEl.textContent = 'not propagating'
+          break
         case 'error':
           if (this.fileName) this.ipfsFileNames.set('error', this.ipfsFileNames.has('error')
             ? this.ipfsFileNames.get('error').includes(fileName)
@@ -853,7 +856,16 @@ export default class Webtorrent extends Intersection() {
             this.ipfsStatusEventListener({
               detail: {
                 activity: false,
-                status: torrent.ipfsStatus,
+                status: torrent.paused ? 'not-seeding' : torrent.ipfsStatus,
+                torrent,
+                gateway: { origin: 'ipfs' }
+              }
+            })
+          } else  if(torrent.paused) {
+            this.ipfsStatusEventListener({
+              detail: {
+                activity: false,
+                status: 'not-seeding',
                 torrent,
                 gateway: { origin: 'ipfs' }
               }
