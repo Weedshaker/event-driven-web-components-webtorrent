@@ -142,7 +142,7 @@ export default class Webtorrent extends WebWorker() {
       destroyStoreOnDestroy: false,
       createdBy: 'decentral-ninja',
       creationDate: 1, // must be 1 to force the same cid later
-      pieceLength: 262144
+      // pieceLength: 262144 // must be default, otherwise the infoHash diverts from webtorrent desktop client
     }
     // trackers
     let presetTrackers = this.hasAttribute('preset-trackers')
@@ -330,7 +330,7 @@ export default class Webtorrent extends WebWorker() {
         ? client.add(input[0], Object.assign(opts || {}, await this.addOpts))
         : client.seed(input, Object.assign(opts || {}, await this.addOpts))
       let torrent = await addOrSeedFunc(input, event.detail.opts)
-      this.onInfoHash(torrent, event.detail.uid, event.detail.room, event.detail.cid, event.detail.resetResume)
+      this.onInfoHash(torrent, event.detail.uid, event.detail.room, event.detail.cid, event.detail.infoHash, event.detail.resetResume)
       // save to storage
       this.onReady(torrent, event.detail.uid, event.detail.room, event.detail.timestamp, event.detail.cid, true, false, false)
       this.onError(torrent)
@@ -347,7 +347,7 @@ export default class Webtorrent extends WebWorker() {
             } else {
               await Webtorrent.destroyTorrent(existingTorrent, existingTorrent.infoHash.toLowerCase())
               torrent = await addOrSeedFunc(input, event.detail.opts)
-              this.onInfoHash(torrent, event.detail.uid, event.detail.room, event.detail.cid, event.detail.resetResume)
+              this.onInfoHash(torrent, event.detail.uid, event.detail.room, event.detail.cid, event.detail.infoHash, event.detail.resetResume)
               // save to storage
               this.onReady(torrent, event.detail.uid, event.detail.room, event.detail.timestamp, event.detail.cid, true, false, false)
               this.onError(torrent)
@@ -437,7 +437,8 @@ export default class Webtorrent extends WebWorker() {
                   input: result.files,
                   uid: event.detail.uid || torrentContainer.uid,
                   room: torrentContainer.room,
-                  cid: torrentContainer.cid
+                  cid: torrentContainer.cid,
+                  infoHash: (torrentContainer.torrent || event.detail.torrent).infoHash
                 }
               })
             } else {
@@ -727,9 +728,10 @@ export default class Webtorrent extends WebWorker() {
     this.clientPromise.finally(() => (this.clientPromise.done = true))
   }
 
-  onInfoHash (torrent, uid, room, cid, resetResume) {
+  onInfoHash (torrent, uid, room, cid, expectedInfoHash, resetResume) {
     const infoHashFuc = () => {
       const infoHash = torrent.infoHash.toLowerCase()
+      if (expectedInfoHash && expectedInfoHash !== infoHash) console.warn('Webtorrent infoHash is not matching expectation!', {torrent, infoHash, expectedInfoHash})
       Webtorrent.#torrentMap.set(infoHash, Promise.resolve({ torrent, streamToServerReadyPromise: this.streamToServerReadyPromise, uid, room, cid, resetResume }))
       this.dispatchEvent(new CustomEvent(`${this.namespace}${infoHash}`, {
         detail: {
