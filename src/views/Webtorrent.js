@@ -159,7 +159,7 @@ export default class Webtorrent extends Intersection() {
           const a = document.createElement('a')
           a.href = url
           a.target = '_blank'
-          a.download = file.name
+          a.download = this.decryptedFileName || file.name
           a.click()
           URL.revokeObjectURL(url)
         }))
@@ -796,7 +796,7 @@ export default class Webtorrent extends Intersection() {
       torrent.on('upload', activityFunc)
       torrent.on('wire', activityFunc)
       let videosPlaying = []
-      this.fileNameEl.textContent = torrent.name
+      this.fileNameEl.textContent = this.decryptedFileName || torrent.name
       if (pinned) {
         this.pinLink.children[0]?.assignedElements()?.[0].setAttribute('state', 'pinned')
       } else {
@@ -975,52 +975,69 @@ export default class Webtorrent extends Intersection() {
   async renderFileTo (file, webComponent, targetContainer, streamToServerReadyPromise, fileCount, streamOrDoneFunc, tagName, append) {
     // check if file is encrypted and if so, get the ReadableStream of stream decrypt
     let keyContainer, iv
-    if ((iv = this.iv)) {
-      if ((keyContainer = await this.keyContainer)) {
-        file.on('iterator', ({ iterator, file, req }, cb) => {
-          this.wasStreaming = true
-          // decrypt on each iteration the requested chunks
-          cb((async function * () {
-            const [, start, end] = (/bytes=(\d+)-(\d*)/.exec(req?.headers?.range) || []).map(num => Number(num))
-            const decryptedStream = await new Promise(async resolve => webComponent.dispatchEvent(new CustomEvent('yjs-decrypt', { // eslint-disable-line
-              detail: {
-                resolve,
-                encrypted: {
-                  text: file, // must be file here, since the range for the stream is going to be calculated by crypto
-                  iv: new Uint8Array(iv.split(',')),
-                  name: 'wormhole-crypto',
-                  key: keyContainer.key.epoch,
-                  start: start || 0,
-                  length: end ? end - start + 1 : file.length - 1,
-                  fileLength: file.length
-                },
-                key: keyContainer
-              },
-              bubbles: true,
-              cancelable: true,
-              composed: true
-            }))).then(result => {
-              if (result) {
-                const { decrypted } = result
-                if (decrypted.error) return null
-                return decrypted.text
-              }
-              return null
-            })
-            if (!decryptedStream) {
-              // fallback to original iterator (must stay valid)
-              yield * iterator
-              return
-            }
-            const reader = decryptedStream.getReader()
-            while (true) {
-              const { value, done } = await reader.read()
-              if (done) return
-              yield value
-            }
-          })())
-        })
+    if ((iv = this.iv) && (keyContainer = await this.keyContainer)) {
+      if (!this.decryptedFileName) {
+        const { decrypted: decryptedFileName } = await new Promise(async resolve => this.dispatchEvent(new CustomEvent('yjs-decrypt', { // eslint-disable-line
+          detail: {
+            resolve,
+            encrypted: {
+              text: file.name.replace(/\.[^.]+$/, '').replaceAll('{d}', '/'),
+              name: 'AES-GCM',
+              // @ts-ignore
+              iv: new Uint8Array(iv.split(',')),
+              key: keyContainer.key.epoch
+            },
+            key: keyContainer
+          },
+          bubbles: true,
+          cancelable: true,
+          composed: true
+        })))
+        if (!decryptedFileName.error) this.fileNameEl.textContent = this.decryptedFileName = decryptedFileName.text
       }
+      file.on('iterator', ({ iterator, file, req }, cb) => {
+        this.wasStreaming = true
+        // decrypt on each iteration the requested chunks
+        cb((async function * () {
+          const [, start, end] = (/bytes=(\d+)-(\d*)/.exec(req?.headers?.range) || []).map(num => Number(num))
+          const decryptedStream = await new Promise(async resolve => webComponent.dispatchEvent(new CustomEvent('yjs-decrypt', { // eslint-disable-line
+            detail: {
+              resolve,
+              encrypted: {
+                text: file, // must be file here, since the range for the stream is going to be calculated by crypto
+                iv: new Uint8Array(iv.split(',')),
+                name: 'wormhole-crypto',
+                key: keyContainer.key.epoch,
+                start: start || 0,
+                length: end ? end - start + 1 : file.length - 1,
+                fileLength: file.length
+              },
+              key: keyContainer
+            },
+            bubbles: true,
+            cancelable: true,
+            composed: true
+          }))).then(result => {
+            if (result) {
+              const { decrypted } = result
+              if (decrypted.error) return null
+              return decrypted.text
+            }
+            return null
+          })
+          if (!decryptedStream) {
+            // fallback to original iterator (must stay valid)
+            yield * iterator
+            return
+          }
+          const reader = decryptedStream.getReader()
+          while (true) {
+            const { value, done } = await reader.read()
+            if (done) return
+            yield value
+          }
+        })())
+      })
     }
     file.on('stream', streamOrDoneFunc)
     file.on('done', streamOrDoneFunc)
@@ -1038,21 +1055,21 @@ export default class Webtorrent extends Intersection() {
     }
     let targetAttribute
     if (!tagName) [tagName, targetAttribute] = Webtorrent.getTagNameByMimeType(file.type, file.path)
-    const { renderTarget, appendTarget, figureTarget } = Webtorrent.getElement(webComponent, tagName, file.name, fileCount)
+    const { renderTarget, appendTarget, figureTarget } = Webtorrent.getElement(webComponent, tagName, this.decryptedFileName || file.name, fileCount)
     if (append) targetContainer.prepend(appendTarget)
     if (tagName === 'a') {
       renderTarget.setAttribute('target', '_blank')
       setHref(renderTarget, false)
-      renderTarget.setAttribute('download', file.name)
-      renderTarget.textContent = file.name
+      renderTarget.setAttribute('download', this.decryptedFileName || file.name)
+      renderTarget.textContent = this.decryptedFileName || file.name
     } else if (tagName === 'track') {
       setHref(renderTarget)
     } else {
       const a = document.createElement('a')
       a.setAttribute('target', '_blank')
       setHref(a)
-      a.setAttribute('download', file.name)
-      a.textContent = file.name
+      a.setAttribute('download', this.decryptedFileName || file.name)
+      a.textContent = this.decryptedFileName || file.name
       renderTarget.prepend(a)
       // here we can consider tagName !== 'video' instead of (!this.hadFileError && !this.wasStreaming), which still makes videos trying to stream decrypt, which does not work, then fail and rerender
       if (streamToServerReadyPromise.done && tagName !== 'embed' && tagName !== 'iframe' && (!this.hadFileError && !this.wasStreaming)) {
