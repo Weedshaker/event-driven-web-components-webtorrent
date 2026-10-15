@@ -981,7 +981,8 @@ export default class Webtorrent extends Intersection() {
           detail: {
             resolve,
             encrypted: {
-              text: file.name.replace(/\.[^.]+$/, '').replaceAll('{d}', '/'),
+              // TODO: .replaceAll('{d}', '/') can be removed after some time. Not needed anymore, due to a fix after version 2.4.0 - 2.4.2
+              text: Webtorrent.decodeFileName(file.name.replace(/\.[^.]+$/, '').replaceAll('{d}', '/')),
               name: 'AES-GCM',
               // @ts-ignore
               iv: new Uint8Array(iv.split(',')),
@@ -1222,6 +1223,11 @@ export default class Webtorrent extends Intersection() {
     if (hours > 0) return `${hours}h ${minutes}m`
     if (minutes > 0) return `${minutes}m ${seconds}s`
     return `${seconds}s`
+  }
+
+  // a modern implementation would be: return new TextDecoder().decode(Uint8Array.fromBase64(name, { alphabet: 'base64url' }))
+  static decodeFileName(name) {
+    return new TextDecoder().decode(Uint8Array.from(atob(name.replaceAll('-', '+').replaceAll('_', '/') + '='.repeat((4 - name.length % 4) % 4)), c => c.charCodeAt(0)))
   }
 
   get details () {
