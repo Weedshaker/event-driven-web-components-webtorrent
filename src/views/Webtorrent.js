@@ -1227,7 +1227,11 @@ export default class Webtorrent extends Intersection() {
 
   // a modern implementation would be: return new TextDecoder().decode(Uint8Array.fromBase64(name, { alphabet: 'base64url' }))
   static decodeFileName(name) {
-    return new TextDecoder().decode(Uint8Array.from(atob(name.replaceAll('-', '+').replaceAll('_', '/') + '='.repeat((4 - name.length % 4) % 4)), c => c.charCodeAt(0)))
+    try {
+      return new TextDecoder().decode(Uint8Array.from(atob(name.replaceAll('-', '+').replaceAll('_', '/') + '='.repeat((4 - name.length % 4) % 4)), c => c.charCodeAt(0)))
+    } catch (error) {
+      return name
+    }
   }
 
   get details () {
