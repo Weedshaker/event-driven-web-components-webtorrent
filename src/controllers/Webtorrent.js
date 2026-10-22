@@ -91,13 +91,10 @@ export default class Webtorrent extends WebWorker() {
     /**
      * has Cache
      *
-     * @returns {(key: string) => Promise<boolean>}
+     * @returns {(key: string) => boolean}
      */
     get has () {
-      return key => {
-        const value = this.map.get(key)
-        return value ? value.then(result => !result.torrent.destroyed) : Promise.resolve(false)
-      }
+      return key => this.map.get(key) ? true : false
     },
     /**
      * set Cache
@@ -214,9 +211,9 @@ export default class Webtorrent extends WebWorker() {
         } catch (error) {}
       }
       // handle existing torrent
-      if (await Webtorrent.#torrentMap.has(infoHash)) {
+      if (!event.detail.force && Webtorrent.#torrentMap.has(infoHash)) {
         const existingResult = await Webtorrent.#torrentMap.get(infoHash)
-        if (existingResult) {
+        if (existingResult && !existingResult.torrent.destroyed) {
           if (event.detail.destroyOpts === undefined) {
             this.webWorker(Webtorrent.saveTorrentContainer, Webtorrent.extractTorrentSimpleObj(existingResult.torrent), location.href, event.detail.uid, event.detail.room, event.detail.timestamp, cid)
             return this.respond(event.detail?.resolve, event.detail?.dispatch, event.detail?.name || `${this.namespace}added`, { ...existingResult, existingResult: true }, existingResult.torrent)
