@@ -74,7 +74,7 @@ export default class Webtorrent extends Intersection() {
         // stop cycle after 10 and reaching status 3
         if (errorCounter < 10 || errorCounterStatus === 3) {
           this.setAttribute('error', '')
-          this.renderTorrent(!!(errorCounterStatus === 1 || errorCounterStatus === 2), errorCounterStatus === 3, (errorCounterStatus === 0 && initTimestamp + stillScrollAfter > Date.now())).then(() => {
+          this.renderTorrent(errorCounterStatus === 1, errorCounterStatus === 3, (errorCounterStatus === 0 && initTimestamp + stillScrollAfter > Date.now()), errorCounterStatus === 2).then(() => {
             if (errorCounterStatus < 2) this.removeAttribute('error')
             this.dispatchEvent(new CustomEvent(`${this.namespace}view-file-error`, {
               detail: {
@@ -177,8 +177,7 @@ export default class Webtorrent extends Intersection() {
         assignedElement.addEventListener('transitionend', event => assignedElement.removeAttribute('rotate'), { once: true })
         assignedElement.setAttribute('rotate', '360deg')
       }
-      this.renderTorrent(resetCounter > 0
-      )
+      this.renderTorrent(resetCounter > 0)
       this.dispatchEvent(new CustomEvent(`${this.namespace}view-reset-link-click`, {
         detail: {
           torrentId: this.torrentId
