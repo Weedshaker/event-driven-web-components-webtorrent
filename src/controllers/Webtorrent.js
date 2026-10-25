@@ -211,7 +211,7 @@ export default class Webtorrent extends WebWorker() {
         } catch (error) {}
       }
       // handle existing torrent
-      if (!event.detail.force && Webtorrent.#torrentMap.has(infoHash)) {
+      if (Webtorrent.#torrentMap.has(infoHash)) {
         const existingResult = await Webtorrent.#torrentMap.get(infoHash)
         if (existingResult && !existingResult.torrent.destroyed) {
           if (event.detail.destroyOpts === undefined) {
