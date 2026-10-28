@@ -409,9 +409,11 @@ export default class Webtorrent extends WebWorker() {
     let resetCounter = 0
     this.webtorrentViewResetLinkClickEventListener = event => {
       // every 3rd time reset
-      if (resetCounter % 3 === 2) this.reset()
+      if (resetCounter % 3 === 2) {
+        this.reset()
+      }
       // show reload icon at fourth reset click
-      if (resetCounter === 3) {
+      if (resetCounter % 5 === 4) {
         this.dispatchEvent(new CustomEvent('hint-reload', {
           bubbles: true,
           cancelable: true,

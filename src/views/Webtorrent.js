@@ -20,6 +20,7 @@ export default class Webtorrent extends Intersection() {
   constructor (options = {}, ...args) {
     super({ importMetaUrl: import.meta.url, tabindex: 'no-tabindex', intersectionObserverInit: {}, ...options }, ...args)
 
+    const outerHTML = this.outerHTML
     // set attribute namespace
     this.namespace = this.getAttribute('namespace') || 'webtorrent-'
     this.torrentId = this.getAttribute('torrent-id') || encodeURI(Array.from((new URL(location.href)).searchParams).reduce((acc, curr) => curr[0] === 'torrent-id'
@@ -114,6 +115,8 @@ export default class Webtorrent extends Intersection() {
       if (!this.hasAttribute('updating')) this.updateHeight()
     }
 
+    this.detailsClickEventListener = event => (this.detailsManualInteraction = true)
+
     this.dblclickEventListener = event => {
       if (event) event.stopPropagation()
     }
@@ -177,7 +180,11 @@ export default class Webtorrent extends Intersection() {
         assignedElement.addEventListener('transitionend', event => assignedElement.removeAttribute('rotate'), { once: true })
         assignedElement.setAttribute('rotate', '360deg')
       }
-      this.renderTorrent(resetCounter > 0)
+      if (resetCounter % 4 === 3) {
+        this.outerHTML = outerHTML
+      } else {
+        this.renderTorrent(resetCounter > 0)
+      }
       this.dispatchEvent(new CustomEvent(`${this.namespace}view-reset-link-click`, {
         detail: {
           torrentId: this.torrentId
@@ -283,14 +290,18 @@ export default class Webtorrent extends Intersection() {
           this.ipfsProgressEl.textContent = bytesUploaded ? `${(bytesUploaded / event.detail.torrent.length * 100).toFixed(1)}%` : ''
           this.ipfsUploadedEl.textContent = Webtorrent.formatBytes(bytesUploaded)
           this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
-          this.ipfsStatusTimeout = setTimeout(() => this.details.setAttribute('open', ''), 1000)
+          this.ipfsStatusTimeout = setTimeout(() => {
+            if (!this.detailsManualInteraction) this.details.setAttribute('open', '')
+          }, 1000)
           break
         case 'done':
           this.ipfsStatusEl.textContent = `Uploaded to ${event.detail.gateway?.origin || 'ipfs'}`
           this.ipfsProgressEl.textContent = '100%'
           this.ipfsUploadedEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
           this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
-          this.ipfsStatusTimeout = setTimeout(() => this.details.removeAttribute('open'), 1000)
+          this.ipfsStatusTimeout = setTimeout(() => {
+            if (!this.detailsManualInteraction) this.details.removeAttribute('open')
+          }, 1000)
           break
         case 'not-seeding':
           this.ipfsStatusEl.textContent = 'not propagating'
@@ -306,7 +317,9 @@ export default class Webtorrent extends Intersection() {
           this.ipfsProgressEl.textContent = '0%'
           this.ipfsUploadedEl.textContent = '0'
           this.ipfsLengthEl.textContent = Webtorrent.formatBytes(event.detail.torrent.length)
-          this.ipfsStatusTimeout = setTimeout(() => this.details.setAttribute('open', ''), 1000)
+          this.ipfsStatusTimeout = setTimeout(() => {
+            if (!this.detailsManualInteraction) this.details.setAttribute('open', '')
+          }, 1000)
           break
       }
     }
@@ -327,6 +340,7 @@ export default class Webtorrent extends Intersection() {
     if (this.shouldRenderHTML()) showPromises.push(this.renderHTML())
     Promise.all(showPromises).then(() => (this.hidden = false))
     this.details.addEventListener('toggle', this.detailsToggleEventListener)
+    this.details.addEventListener('click', this.detailsClickEventListener, {once: true})
     this.addEventListener('dblclick', this.dblclickEventListener)
     this.pinLink.addEventListener('click', this.pinClickLinkEventListener)
     this.downloadLink.addEventListener('click', this.downloadClickLinkEventListener)
@@ -365,6 +379,7 @@ export default class Webtorrent extends Intersection() {
   disconnectedCallback () {
     super.disconnectedCallback()
     this.details.removeEventListener('toggle', this.detailsToggleEventListener)
+    this.details.removeEventListener('click', this.detailsClickEventListener)
     this.removeEventListener('dblclick', this.dblclickEventListener)
     this.pinLink.removeEventListener('click', this.pinClickLinkEventListener)
     this.downloadLink.removeEventListener('click', this.downloadClickLinkEventListener)
@@ -784,7 +799,9 @@ export default class Webtorrent extends Intersection() {
       }
       if (this.hasAttribute('request-key')) return
       torrent.on('error', this.torrentErrorEventListener)
-      const doneFunc = () => this.details.removeAttribute('open')
+      const doneFunc = () => {
+        if (!this.detailsManualInteraction) this.details.removeAttribute('open')
+      }
       if (torrent.done) doneFunc()
       torrent.on('done', doneFunc)
       this.renderedTorrent++
