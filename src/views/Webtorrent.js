@@ -61,7 +61,7 @@ export default class Webtorrent extends Intersection() {
       }))
     }
 
-    let errorCounter = 0
+    let errorCounter = 1
     let errorTimeoutID
     this.fileErrorEventListener = event => {
       if (event.target?.tagName === 'TRACK') return
@@ -169,7 +169,7 @@ export default class Webtorrent extends Intersection() {
       }
     }
 
-    let resetCounter = 0
+    let resetCounter = 1
     this.resetClickLinkEventListener = event => {
       if (event) {
         event.preventDefault()
